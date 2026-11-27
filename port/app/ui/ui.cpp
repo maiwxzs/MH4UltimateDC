@@ -656,7 +656,18 @@ void Layer::Frame() {
                 notice = fmt::format("{} {}/{}", Lang::Tr("Taking every reward..."), done, total);
             }
         } else if (!capturing && take_all_ended != 0 && now - take_all_ended < 1500) {
-            notice = Lang::Tr("Every reward taken: what didn't fit is still in the box");
+            notice = Lang::Tr(Input::TakeAllNote() == 2 ? "Every reward taken"
+                                                        : "Every reward taken: what didn't fit is still in the box");
+        }
+        // a press away from the quest's results: say why nothing happened
+        static int seen_refusals = 0;
+        static std::uint32_t refused_at = 0;
+        if (const int refusals = Input::TakeAllRefusals(); refusals != seen_refusals) {
+            seen_refusals = refusals;
+            refused_at = now;
+        }
+        if (!capturing && refused_at != 0 && now - refused_at < 2000) {
+            notice = Lang::Tr("Take every reward: only on the quest's reward screen");
         }
     }
     const bool draw = capturing || keyboard->HasNotice() || !hint.Empty() || fps_counter || guides ||

@@ -84,6 +84,11 @@ void TakeAllRewards();
 
 /// While "take every item" runs: how many of its presses are done of `total`; false when idle.
 bool TakeAllProgress(int& done, int& total);
+/// How the last one went: 0 it ran (or runs), 1 refused (not on the quest's results), 2 stopped
+/// early (the results ended: the box was empty).
+int TakeAllNote();
+/// How many presses it refused so far (away from the quest's results).
+int TakeAllRefusals();
 
 /// Where the stylus (the mouse, a finger) last touched the touch screen, in its pixels; false
 /// until it has. The menu's touch taps take a point from it.

@@ -273,6 +273,9 @@ int NativeButtonByName(const std::string& name) {
 Kbm::Sequence take_all;
 std::atomic<bool> take_all_requested{false};
 std::atomic<int> take_all_done{0}, take_all_total{0};  // for the menu's notice (ui.cpp)
+std::atomic<int> take_all_note{0};  // TakeAllNote(): how the last one went
+std::atomic<int> take_all_refusals{0};  // presses away from the results, for the notice
+constexpr int TAKE_ALL_RUNNING = 0, TAKE_ALL_NOT_HERE = 1, TAKE_ALL_STOPPED = 2;
 
 Kbm::ItemScroll item_scroll(MACRO_KEY + NativeButton::L, MACRO_KEY + NativeButton::Y,
                             MACRO_KEY + NativeButton::A);
@@ -599,6 +602,34 @@ void TakeAllRewards() {
     take_all_requested.store(true);
 }
 
+/// The reward box: 6 rows of 8 slots, the cursor on the first; A on each, the D-pad between.
+static void StartTakeAll(Kbm::Sequence& sequence) {
+    constexpr int ROWS = 6, COLUMNS = 8;
+    const int a = MACRO_KEY + NativeButton::A;
+    std::vector<int> codes;
+    for (int row = 0; row < ROWS; ++row) {
+        const int along = MACRO_KEY + (row % 2 == 0 ? NativeButton::Right : NativeButton::Left);
+        for (int column = 0; column < COLUMNS; ++column) {
+            codes.push_back(a);
+            if (column + 1 < COLUMNS) {
+                codes.push_back(along);
+            }
+        }
+        if (row + 1 < ROWS) {
+            codes.push_back(MACRO_KEY + NativeButton::Down);
+        }
+    }
+    sequence.Start(std::move(codes));
+}
+
+int TakeAllNote() {
+    return take_all_note.load(std::memory_order_relaxed);
+}
+
+int TakeAllRefusals() {
+    return take_all_refusals.load(std::memory_order_relaxed);
+}
+
 bool TakeAllProgress(int& done, int& total) {
     total = take_all_total.load(std::memory_order_relaxed);
     done = take_all_done.load(std::memory_order_relaxed);
@@ -638,24 +669,21 @@ void Tick(const Config& config) {
     }
     Apply(pulses.Tick());
     Apply(item_scroll.Tick());
+    const bool results = Port::Hooks::ResultScreenState() >= 0;
+    if (!take_all.Idle() && !results) {
+        // the box emptied and the game went on: the rest of the presses would act there
+        take_all.Stop();
+        take_all_note.store(TAKE_ALL_STOPPED, std::memory_order_relaxed);
+    }
     if (take_all_requested.exchange(false)) {
-        // the reward box: 6 rows of 8 slots, the cursor on the first; A on each, the D-pad between
-        constexpr int ROWS = 6, COLUMNS = 8;
-        const int a = MACRO_KEY + NativeButton::A;
-        std::vector<int> codes;
-        for (int row = 0; row < ROWS; ++row) {
-            const int along = MACRO_KEY + (row % 2 == 0 ? NativeButton::Right : NativeButton::Left);
-            for (int column = 0; column < COLUMNS; ++column) {
-                codes.push_back(a);
-                if (column + 1 < COLUMNS) {
-                    codes.push_back(along);
-                }
-            }
-            if (row + 1 < ROWS) {
-                codes.push_back(MACRO_KEY + NativeButton::Down);
-            }
+        if (!results) {
+            // only on the quest's results: anywhere else its presses would move items about
+            take_all_note.store(TAKE_ALL_NOT_HERE, std::memory_order_relaxed);
+            take_all_refusals.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            take_all_note.store(TAKE_ALL_RUNNING, std::memory_order_relaxed);
+            StartTakeAll(take_all);
         }
-        take_all.Start(std::move(codes));
     }
     Apply(take_all.Tick());
     take_all_done.store(take_all.Idle() ? 0 : static_cast<int>(take_all.Done()), std::memory_order_relaxed);

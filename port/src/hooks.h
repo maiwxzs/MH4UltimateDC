@@ -94,6 +94,10 @@ bool CameraTurnActive();
 /// A turn not taken yet is dropped (the mouse stopped being the camera).
 void ClearCameraTurn();
 
+/// The quest results' screen (cResult, the results and the reward box after a quest): its state
+/// while it runs, -1 while it doesn't. Safe from any thread.
+int ResultScreenState();
+
 /// How many of the port's hook points the code library loaded last didn't have (it was built
 /// with an older config/hooks.txt, so the options behind them don't work until it is rebuilt).
 int MissingHookPoints();

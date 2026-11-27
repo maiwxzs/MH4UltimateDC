@@ -4,6 +4,8 @@
 // frame.
 #pragma once
 
+#include <algorithm>
+
 #include <utility>
 #include <vector>
 
@@ -80,6 +82,10 @@ public:
     }
     size_t Size() const {
         return codes.size();
+    }
+    /// Stops after the key down now (if one is) goes up.
+    void Stop() {
+        codes.resize(std::min(codes.size(), down ? next + 1 : next));
     }
 
 private:

@@ -311,7 +311,7 @@ void Set(Options& o, const std::string& key, const std::string& value) {
     } else if (key == "gather_speed") {
         float f = IsOff(value) ? 1.0f : std::strtof(value.c_str(), nullptr);
         f = f > 5.0f ? f / 100.0f : f;
-        o.gather_speed = f > 0.0f ? std::clamp(f, 1.0f, 4.0f) : 1.0f;
+        o.gather_speed = f > 0.0f ? std::clamp(f, 1.0f, 2.5f) : 1.0f;  // faster breaks the motions
     } else if (key == "trace_actions") {
         o.trace_actions = IsOn(value);
     } else if (key == "trace_layout") {
@@ -994,6 +994,12 @@ constexpr u32 RESULT_COUNTDOWN = 0x14;
 constexpr u32 RESULT_MARK = 0x1c;
 bool result_skip_held = false;
 
+constexpr u32 RESULT_STATE = 0x4;
+s64 SteadyNs();
+std::atomic<s64> result_ran_at{0};   // SteadyNs() of cResult::update's last run
+std::atomic<u32> result_state{0};    // its state then
+u32 result_traced_state = ~0u;
+
 void ResultUpdate(RCtx* ctx, RFunc original) {
     const u32 result = ctx->r[0];
     if (result_skip_held && result != 0) {
@@ -1004,6 +1010,15 @@ void ResultUpdate(RCtx* ctx, RFunc original) {
         }
     }
     original(ctx);
+    if (result != 0) {
+        const u32 state = rd32(ctx, result + RESULT_STATE);
+        result_state.store(state, std::memory_order_relaxed);
+        result_ran_at.store(SteadyNs(), std::memory_order_relaxed);
+        if (options.trace_actions && state != result_traced_state) {
+            LOG_INFO(Frontend, "results: frame {} state {}", frames, state);
+            result_traced_state = state;
+        }
+    }
 }
 
 // ── The hunters' actions (uMHchar, the base of hunters, monsters and NPCs): its move
@@ -1021,9 +1036,10 @@ constexpr u32 PLAYER_MOTION_SPEED = 0xc0;
 constexpr u32 HUNTER_VTABLES[] = {0x00e6bcd4, 0x00e6edbc, 0x00e6ef2c, 0x00e6f09c, 0x00e6f20c, 0x00e6f37c, 0x00e6f4ec, 0x00e6f65c, 0x00e6f7cc, 0x00e6f93c, 0x00e6faac, 0x00e6fc1c, 0x00e6fefc};
 std::unordered_map<u32, u32> traced_actions;  // char -> act_no << 8 | act_st last logged
 
-// The actions gather_speed hastens, from a trace_actions log of a hunt (USA v1.3.0): 77 gathering
-// by hand, 78 mining or catching bugs (after 24, taking the tool out), 83 carving.
-constexpr u8 GATHER_ACTIONS[] = {77, 78, 83};
+// The actions gather_speed hastens, from trace_actions logs of hunts (USA v1.3.0): 77 gathering by
+// hand, 78 mining (after 24, taking the tool out), 81 and 82 gathering crouched (herbs,
+// mushrooms), 83 carving, 84 catching bugs (after 24 too).
+constexpr u8 GATHER_ACTIONS[] = {77, 78, 81, 82, 83, 84};
 
 bool IsHunter(RCtx* ctx, u32 chr) {
     const u32 vtable = rd32(ctx, chr);
@@ -1951,6 +1967,14 @@ bool CameraTurnActive() {
 
 void ClearCameraTurn() {
     camera_turn_yaw = camera_turn_pitch = 0.0;
+}
+
+int ResultScreenState() {
+    const s64 at = result_ran_at.load(std::memory_order_relaxed);
+    if (at == 0 || SteadyNs() - at > 250'000'000) {  // 0.25 s
+        return -1;
+    }
+    return static_cast<int>(result_state.load(std::memory_order_relaxed));
 }
 
 int MissingHookPoints() {

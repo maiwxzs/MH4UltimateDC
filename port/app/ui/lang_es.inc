@@ -600,3 +600,5 @@
 {"End the quest: hold ", "Terminar la misión: mantén "},
 {"Off keeps its own job (map / whole touch screen); or a further 3DS button or a port action instead.", "Apagado deja su función de siempre (mapa / pantalla táctil entera); o en su lugar otro botón del 3DS o una acción del port."},
 {"Carving, gathering, mining and catching bugs: your hunter's animation this much faster. The rest of the game as ever.", "Tallar, recolectar, minar y cazar bichos: la animación de tu cazador así de rápida. El resto del juego, normal."},
+{"Every reward taken", "Todas las recompensas recogidas"},
+{"Take every reward: only on the quest's reward screen", "Tomar todas las recompensas: solo en la pantalla de recompensas"},

@@ -716,8 +716,8 @@ void Menu::DrawGameplay() {
             if (speed.empty() || IsOff(speed) || speed == "1") {
                 speed = "100";
             }
-            if (ChooseValue("##gather_speed", speed, {"100", "150", "200", "250", "300"},
-                            {"100% (as it comes)", "150%", "200%", "250%", "300%"})) {
+            if (ChooseValue("##gather_speed", speed, {"100", "150", "200", "250"},
+                            {"100% (as it comes)", "150%", "200%", "250%"})) {
                 SetGame("gather_speed", speed);
             }
             EndRow(R::GameplayGatherSpeed);
