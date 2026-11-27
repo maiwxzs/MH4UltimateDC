@@ -39,6 +39,9 @@ public:
     /// Handles the window's events: input, its own keys, resizing, closing. Azahar's renderers
     /// call it once a frame on the emulation thread.
     void PollEvents() override;
+    /// A controller's back paddle or share button, pressed or let go: the port's action it was given
+    /// (Config::pad_extra), if any.
+    void PadExtraAction(int button, bool down);
 
     /// For renderers that hand finished frames to the window (OpenGL, software): shows them
     /// until the window closes. Runs on a thread of its own.

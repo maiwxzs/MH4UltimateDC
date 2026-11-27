@@ -263,6 +263,39 @@ void Window::OnKey(int scancode, bool down, u16 modifiers) {
     }
 }
 
+void Window::PadExtraAction(int button, bool down) {
+    // a back paddle or the share button given one of the port's own actions (Config::pad_extra:
+    // map, pause, fast_forward, key_guides, fps_counter); one given a 3DS button is the input
+    // profile's (input.cpp)
+    static constexpr int BUTTONS[Config::PAD_EXTRA_COUNT] = {
+        SDL_CONTROLLER_BUTTON_PADDLE1, SDL_CONTROLLER_BUTTON_PADDLE2, SDL_CONTROLLER_BUTTON_PADDLE3,
+        SDL_CONTROLLER_BUTTON_PADDLE4, SDL_CONTROLLER_BUTTON_MISC1};
+    for (int e = 0; e < Config::PAD_EXTRA_COUNT; ++e) {
+        if (BUTTONS[e] != button) {
+            continue;
+        }
+        const std::string& action = config.pad_extra[e];
+        const auto now = SDL_GetTicks();
+        if (action == "map") {
+            if (down) {
+                Ui::TouchScreenKey(now);
+            }
+        } else if (action == "pause") {
+            Speed::Get().PauseKey(down, now);
+        } else if (action == "fast_forward") {
+            Speed::Get().FastForwardKey(down, now);
+        } else if (action == "key_guides") {
+            if (down) {
+                Ui::ToggleKeyGuides();
+            }
+        } else if (action == "fps_counter") {
+            if (down) {
+                Ui::ToggleFpsCounter();
+            }
+        }
+    }
+}
+
 void Window::PollEvents() {
     if (keys_changed.exchange(false)) {
         ReadKeys();
@@ -398,6 +431,10 @@ void Window::PollEvents() {
             if (event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
                 Ui::TouchScreenKey(SDL_GetTicks());
             }
+            PadExtraAction(event.cbutton.button, true);
+            break;
+        case SDL_CONTROLLERBUTTONUP:
+            PadExtraAction(event.cbutton.button, false);
             break;
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:

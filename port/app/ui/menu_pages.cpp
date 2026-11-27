@@ -255,6 +255,18 @@ void Menu::DrawDisplay() {
             }
             EndRow(R::DisplayHudEdges);
         }
+        if (BeginRow(R::DisplayFov)) {
+            // the hunting camera's field of view, in % of the game's own (port/src/hooks.cpp)
+            std::string fov = Lower(Game("fov"));
+            if (fov.empty() || IsOff(fov) || fov == "1") {
+                fov = "100";
+            }
+            if (ChooseValue("##fov", fov, {"80", "90", "100", "110", "120", "130", "140", "150"},
+                            {"80%", "90%", "100% (as it comes)", "110%", "120%", "130%", "140%", "150%"})) {
+                SetGame("fov", fov);
+            }
+            EndRow(R::DisplayFov);
+        }
         LinkRow("Screens and the touch screen's corner", Tab::TouchScreen,
                 "Opens Touch screen: where the 3DS's two screens go, the touch screen's corner and the quest map.",
                 "display_touch");
@@ -658,9 +670,11 @@ void Menu::DrawControls() {
             std::string value = Lower(config.pad_extra[e]);
             if (ChooseValue(fmt::format("##{}", PAD_EXTRA_NAMES[e]).c_str(), value,
                             {"off", "a", "b", "x", "y", "l", "r", "zl", "zr", "start", "select", "up", "down",
-                             "left", "right"},
+                             "left", "right", "map", "pause", "fast_forward", "key_guides", "fps_counter"},
                             {"Off", "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "START", "SELECT", "D-pad up",
-                             "D-pad down", "D-pad left", "D-pad right"})) {
+                             "D-pad down", "D-pad left", "D-pad right", "Map / whole touch screen",
+                             "Pause (playing alone)", "Fast forward (playing alone)", "Show / hide the key guides",
+                             "Frame-rate counter"})) {
                 config.pad_extra[e] = value;
                 ControlsChanged();
             }

@@ -101,6 +101,8 @@ struct Options {
     bool widescreen_match = false;  // widescreen = match: the top screen takes the frontend's
                                     // window shape (SetWindowSize), resolved by Install
     bool wide_render = false;  // wide_render / MH4U_WIDE_RENDER: render the wider image itself
+    float fov = 1.0f;       // fov / MH4U_FOV: the hunting camera's field of view, times the game's
+                            // own (100 or 1: as it comes; 70-150 in %)
     u32 trace_every = 0;    // trace_frames / MH4U_TRACE_FRAMES: log frame timing every n frames
     bool trace_panels = false;  // trace_panels / MH4U_TRACE_PANELS: log touch-panel activity
     u32 render_set = 0, render_clear = 0;  // render_flags_set/_clear: bits of the render word
@@ -246,6 +248,11 @@ void Set(Options& o, const std::string& key, const std::string& value) {
         o.widescreen = o.widescreen_match ? 0.0f : ParseAspect(value);
     } else if (key == "wide_render") {
         o.wide_render = IsOn(value);
+    } else if (key == "fov") {
+        // a percentage (110) or a factor (1.1); off or 0: the game's own
+        float f = IsOff(value) ? 0.0f : std::strtof(value.c_str(), nullptr);
+        f = f > 3.0f ? f / 100.0f : f;
+        o.fov = f > 0.0f ? std::clamp(f, 0.5f, 2.0f) : 1.0f;
     } else if (key == "dither") {
         o.dither = IsOn(value);
     } else if (key == "stereo_3d") {
@@ -331,6 +338,7 @@ Options LoadOptions(std::vector<std::string>& log) {
         {"MH4U_FPS", "fps"},
         {"MH4U_REFRESH_RATE", "refresh_rate"},
         {"MH4U_WIDESCREEN", "widescreen"},
+        {"MH4U_FOV", "fov"},
         {"MH4U_WIDE_RENDER", "wide_render"},
         {"MH4U_TRACE_FRAMES", "trace_frames"},
         {"MH4U_TRACE_PANELS", "trace_panels"},
@@ -482,6 +490,33 @@ void GetProjMatrix(RCtx* ctx, RFunc original) {
         !OnBottomScreen(ctx, camera)) {
         WriteF32(ctx, out, ReadF32(ctx, out) * rendered / options.widescreen);
     }
+}
+
+/// The hunting camera's (uMhCamera's) getProjMatrix: as above, then the field of view times
+/// `fov` (docs/research/widescreen.md, "Projection matrix": an OpenGL-style matrix from
+/// MtMatrix::perspective, m00 = cot(fov/2)/aspect at +0x00 and m11 = cot(fov/2) at +0x14, from
+/// the camera's mFov in degrees at +0x3c). The angle is scaled, not the zoom, so that 120% of 40
+/// degrees is 48 degrees; both terms shrink by the same factor, so the aspect stays and culling
+/// and stereo follow the matrix. Cutscene and free cameras keep the game's framing.
+constexpr u32 CAMERA_FOV = 0x3c;
+constexpr u32 MATRIX_M11 = 0x14;
+
+void GetProjMatrixHunting(RCtx* ctx, RFunc original) {
+    const u32 out = ctx->r[0];
+    const u32 camera = ctx->r[1];
+    GetProjMatrix(ctx, original);
+    if (std::fabs(options.fov - 1.0f) < 0.001f || OnBottomScreen(ctx, camera)) {
+        return;
+    }
+    constexpr float RAD = 3.14159265f / 180.0f;
+    const float own = ReadF32(ctx, camera + CAMERA_FOV);
+    float k = options.fov;  // without a sensible angle: the view's extent scaled instead
+    if (own > 1.0f && own < 170.0f) {
+        const float wanted = std::clamp(own * options.fov, 5.0f, 150.0f);
+        k = std::tan(wanted * RAD / 2.0f) / std::tan(own * RAD / 2.0f);
+    }
+    WriteF32(ctx, out, ReadF32(ctx, out) / k);
+    WriteF32(ctx, out + MATRIX_M11, ReadF32(ctx, out + MATRIX_M11) / k);
 }
 
 // ── True widescreen (wide_render, experimental): the top screen is rendered W pixels wide
@@ -1485,7 +1520,7 @@ struct Hook {
 constexpr Hook HOOKS[] = {
     {0x006442f8, "sMain::updateFrameTiming", UpdateFrameTiming},
     {0x00af5250, "sMhMain::frame", Frame},
-    {0x00c46380, "uMhCamera::getProjMatrix", GetProjMatrix},
+    {0x00c46380, "uMhCamera::getProjMatrix", GetProjMatrixHunting},
     {0x002535f8, "uFreeCamera::getProjMatrix", GetProjMatrix},
     {0x0032e338, "uMotionCamera::getProjMatrix", GetProjMatrix},
     {0x00633188, "nDraw::Scene::Scene", SceneCtor},
@@ -1842,7 +1877,7 @@ int SkipHint() {
 bool SetOption(const std::string& key, const std::string& value) {
     // the options the hooks read each time they run; the others are applied once at start-up
     static constexpr std::string_view live[] = {
-        "fps", "refresh_rate", "dither", "stereo_3d", "antialiasing", "render_flags_set", "render_flags_clear",
+        "fps", "refresh_rate", "fov", "dither", "stereo_3d", "antialiasing", "render_flags_set", "render_flags_clear",
         "kick",
         "target", "skip", "skip_panel", "skip_hint", "skip_end", "skip_end_hold", "touch_overlay",
         "quest_overlay", "target_overlay",

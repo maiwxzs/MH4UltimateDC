@@ -88,6 +88,7 @@ enum class RowId : int {
     DisplayAspect,
     DisplayWideRender,
     DisplayHudEdges,
+    DisplayFov,
     GraphicsResolution,
     GraphicsLinearFilter,
     GraphicsAntialiasing,

@@ -338,7 +338,8 @@ camera_invert_y = {}
         }
     }
     sticks += "# the controller's back paddles and its misc (share) button as a further button for a 3DS button\n"
-              "# besides its own (A, B, X, Y, L, R, ZL, ZR, START, SELECT, UP, DOWN, LEFT, RIGHT) or off\n";
+              "# besides its own (A, B, X, Y, L, R, ZL, ZR, START, SELECT, UP, DOWN, LEFT, RIGHT), one of the\n"
+              "# port's actions (map, pause, fast_forward, key_guides, fps_counter) or off\n";
     for (int i = 0; i < Config::PAD_EXTRA_COUNT; ++i) {
         sticks += fmt::format("{} = {}\n", PAD_EXTRA_NAMES[i], c.pad_extra[i]);
     }
