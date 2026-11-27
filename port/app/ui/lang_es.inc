@@ -586,7 +586,6 @@
 {"Mods", "Mods"},
 {"Free on a 3DS: a further 3DS button or a port action. Back buttons Windows hides can send it (controller's app).", "Libre en la 3DS: un botón extra de la 3DS o una acción del port. Los botones traseros que Windows oculta pueden enviarlo (app del mando)."},
 {"Faster carving and gathering", "Tallado y recolección rápidos"},
-{"Carving, gathering, mining and catching bugs, their animations this much faster. Online, others see it too.", "Tallar, recolectar, picar y atrapar bichos: sus animaciones así de rápidas. En línea, los demás también lo ven."},
 {"150%", "150 %"},
 {"200%", "200 %"},
 {"250%", "250 %"},
@@ -600,3 +599,4 @@
 {" to end the quest", " para terminar la misión"},
 {"End the quest: hold ", "Terminar la misión: mantén "},
 {"Off keeps its own job (map / whole touch screen); or a further 3DS button or a port action instead.", "Apagado deja su función de siempre (mapa / pantalla táctil entera); o en su lugar otro botón del 3DS o una acción del port."},
+{"Carving, gathering, mining and catching bugs: your hunter's animation this much faster. The rest of the game as ever.", "Tallar, recolectar, minar y cazar bichos: la animación de tu cazador así de rápida. El resto del juego, normal."},

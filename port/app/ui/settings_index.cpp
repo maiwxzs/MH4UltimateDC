@@ -415,7 +415,7 @@ const Row ROWS[] = {
      "text skip dialog dialogue message letters typing instant rpg fast talk npc texto", "", "", false, false,
      "mh4u.ini text_skip"},
     {"gameplay.gather_speed", "gameplay.buttons", S, "Faster carving and gathering", nullptr,
-     "Carving, gathering, mining and catching bugs, their animations this much faster. Online, others see it too.",
+     "Carving, gathering, mining and catching bugs: your hunter's animation this much faster. The rest of the game as ever.",
      "carve carving gather gathering mine mining bug net harvest fast speed tallar recolectar picar", "", "", false,
      false, "mh4u.ini gather_speed"},
     {"gameplay.result_skip", "gameplay.after_quest", S, "Quick results and rewards", nullptr,

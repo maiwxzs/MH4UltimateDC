@@ -1024,60 +1024,42 @@ std::unordered_map<u32, u32> traced_actions;  // char -> act_no << 8 | act_st la
 // The actions gather_speed hastens, from a trace_actions log of a hunt (USA v1.3.0): 77 gathering
 // by hand, 78 mining or catching bugs (after 24, taking the tool out), 83 carving.
 constexpr u8 GATHER_ACTIONS[] = {77, 78, 83};
-struct Hastened {
-    u32 action = ~0u;  // the action whose speed was read
-    float own = 0.0f;  // its motion speed as the game set it
-};
-std::unordered_map<u32, Hastened> hastened;  // char -> the action being hastened
 
 bool IsHunter(RCtx* ctx, u32 chr) {
     const u32 vtable = rd32(ctx, chr);
     return std::find(std::begin(HUNTER_VTABLES), std::end(HUNTER_VTABLES), vtable) != std::end(HUNTER_VTABLES);
 }
 
-/// gather_speed: while a hunter carves or gathers, its motion speed is the game's own for that
-/// action times gather_speed, set before and after the move (so that a speed the game sets once
-/// at the action's start, or each frame, both end up hastened; never multiplied twice).
-void HastenGathering(RCtx* ctx, u32 chr, bool after) {
-    const u32 base = rd32(ctx, chr + CHAR_BASE_WORK);
-    const u32 work = rd32(ctx, chr + CHAR_PLAYER_WORK);
-    if (base == 0 || work == 0) {
-        return;
-    }
-    const u8 act_no = rd8(ctx, base + BASE_ACT_NO);
-    const bool gathering = std::find(std::begin(GATHER_ACTIONS), std::end(GATHER_ACTIONS), act_no) !=
-                           std::end(GATHER_ACTIONS);
-    auto it = hastened.find(chr);
-    if (!gathering) {
-        if (it != hastened.end()) {
-            hastened.erase(it);
+/// gather_speed: while a hunter carves, gathers, mines or catches bugs, its model plays the motion
+/// at the game's own speed times gather_speed. The player's per-frame update works out the speed
+/// (pbw->mPlayerSpeed times its conditions), keeps it in pw->mNowMotSpeed and hands it to the
+/// model's setMotionSpeed (0x00b065d4: this, s0): only that last one plays the motion, so it is
+/// the one hastened. Only the hunter's motion: the rest of the game runs as ever, and the items
+/// still come from the game's own action at its end.
+u64 gather_traced_at = 0;  // the frame gather_speed last hastened a motion (trace_actions logs a new run)
+
+void SetMotionSpeed(RCtx* ctx, RFunc original) {
+    const u32 chr = ctx->r[0];
+    if (options.gather_speed > 1.001f && chr != 0 && IsHunter(ctx, chr)) {
+        const u32 base = rd32(ctx, chr + CHAR_BASE_WORK);
+        if (base != 0) {
+            const u8 act_no = rd8(ctx, base + BASE_ACT_NO);
+            if (std::find(std::begin(GATHER_ACTIONS), std::end(GATHER_ACTIONS), act_no) != std::end(GATHER_ACTIONS)) {
+                if (options.trace_actions && frames - gather_traced_at > 30) {
+                    LOG_INFO(Frontend, "actions: act_no {} motion speed {:.2f} -> {:.2f}", act_no, ctx->f.s[0],
+                             ctx->f.s[0] * options.gather_speed);
+                }
+                gather_traced_at = frames;
+                ctx->f.s[0] *= options.gather_speed;
+            }
         }
-        return;
     }
-    const u32 action = static_cast<u32>(act_no) << 8 | rd8(ctx, base + BASE_ACT_ST);
-    const float now = ReadF32(ctx, work + PLAYER_MOTION_SPEED);
-    if (it == hastened.end() || it->second.action != action) {
-        if (!after) {
-            return;  // the game sets the new action's speed in this move: read it after
-        }
-        it = hastened.insert_or_assign(chr, Hastened{action, now > 0.0f ? now : 1.0f}).first;
-    } else if (now > 0.0f && std::fabs(now - it->second.own * options.gather_speed) > 0.001f &&
-               std::fabs(now - it->second.own) > 0.001f) {
-        it->second.own = now;  // the game changed the speed within the action
-    }
-    WriteF32(ctx, work + PLAYER_MOTION_SPEED, it->second.own * options.gather_speed);
+    original(ctx);
 }
 
 void CharMove(RCtx* ctx, RFunc original) {
     const u32 chr = ctx->r[0];
-    const bool hasten = options.gather_speed > 1.001f && chr != 0 && IsHunter(ctx, chr);
-    if (hasten) {
-        HastenGathering(ctx, chr, false);
-    }
     original(ctx);
-    if (hasten) {
-        HastenGathering(ctx, chr, true);
-    }
     if (!options.trace_actions || chr == 0 || !IsHunter(ctx, chr)) {
         return;
     }
@@ -1720,6 +1702,7 @@ constexpr Hook HOOKS[] = {
     {0x002859f8, "cGUIInstText::updateTyping", GuiTextUpdate},
     {0x00acccd0, "cResult::update", ResultUpdate},
     {0x00b48880, "uMHchar::move", CharMove},
+    {0x00b065d4, "uMHchar::setMotionSpeed", SetMotionSpeed},
     {0x00bfcfd8, "sMhCamera::turnByInput", CameraTurnByInput},
     {0x00b7c010, "QuestFlow::startQuest", StartQuest},
     {0x0065c18c, "aQuest::playing", QuestPlaying},

@@ -74,7 +74,10 @@ void Control::SetInRoom(bool now_in_room, std::uint32_t now_ms) {
 }
 
 int Control::Limit() const {
-    return Fast() ? fast_percent : -1;
+    if (Fast()) {
+        return fast_percent;
+    }
+    return auto_percent > 100 && !paused && !in_room ? auto_percent : -1;
 }
 
 std::string Control::SpeedText(int percent) {

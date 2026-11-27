@@ -28,6 +28,12 @@ public:
     /// the keys only say why while it does.
     void SetInRoom(bool in_room, std::uint32_t now_ms);
 
+    /// The app's own speed-up for a moment (taking every quest reward), in %; 0:
+    /// none. Playing alone only, and the fast forward key's speed wins while it is on.
+    void SetAuto(int percent) {
+        auto_percent = percent;
+    }
+
     bool Paused() const {
         return paused;
     }
@@ -50,6 +56,7 @@ private:
     void Notice(const char* text, std::uint32_t now_ms);
 
     int fast_percent = 200;
+    int auto_percent = 0;
     bool hold = false;
     bool paused = false;
     bool fast = false;
