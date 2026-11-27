@@ -5,6 +5,7 @@
 
 #include "launcher/state.h"
 #include "launcher/ui.h"
+#include "ui/lang.h"
 
 namespace Launcher {
 
@@ -123,11 +124,11 @@ void DrawSetup(State& s) {
     if (current == 1) {
         FocusNext(s);
     }
-    if (game_ok ? ImGui::Button("Choose another game file...") : Ui::AccentButton("Choose the game file...")) {
+    if (game_ok ? ImGui::Button(App::Ui::Lang::Tr("Choose another game file...")) : Ui::AccentButton("Choose the game file...")) {
         s.ChooseGame();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Browse in the launcher...##game")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Browse in the launcher...##game"))) {
         s.ChooseGame(true);
     }
     Ui::EndCard();
@@ -145,11 +146,11 @@ void DrawSetup(State& s) {
     if (current == 2) {
         FocusNext(s, !s.job.Active());
     }
-    if (update_ok ? ImGui::Button("Install it again...") : Ui::AccentButton("Install the update from a .cia...")) {
+    if (update_ok ? ImGui::Button(App::Ui::Lang::Tr("Install it again...")) : Ui::AccentButton("Install the update from a .cia...")) {
         s.ChooseAndInstallUpdate();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Browse in the launcher...##update")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Browse in the launcher...##update"))) {
         s.ChooseAndInstallUpdate(true);
     }
     ImGui::EndDisabled();
@@ -174,7 +175,7 @@ void DrawSetup(State& s) {
                        "Keep the package's mh4u-tools folder next to the app.");
     } else if (s.python.command.empty()) {
         Ui::StatusLine(Ui::Status::Error, "Python 3.10 or newer is needed", Tools::PythonHint(s.python));
-        if (ImGui::Button("Check again")) {
+        if (ImGui::Button(App::Ui::Lang::Tr("Check again"))) {
             s.ProbeTools();
         }
     } else {
@@ -186,7 +187,7 @@ void DrawSetup(State& s) {
         FocusNext(s, can_build);
     }
     const bool rebuild = s.library_exists && s.code.state != Code::NotUsed && s.code.state != Code::Partial;
-    if (rebuild ? ImGui::Button("Build it again") : Ui::AccentButton("Build the code library")) {
+    if (rebuild ? ImGui::Button(App::Ui::Lang::Tr("Build it again")) : Ui::AccentButton("Build the code library")) {
         s.StartBuild();
     }
     ImGui::EndDisabled();
@@ -204,7 +205,7 @@ void DrawSetup(State& s) {
             s.wizard = false;
             s.GoTo(Screen::Home);
         }
-    } else if (ImGui::Button("Back to Home")) {
+    } else if (ImGui::Button(App::Ui::Lang::Tr("Back to Home"))) {
         s.GoTo(Screen::Home);
     }
     ImGui::EndChild();

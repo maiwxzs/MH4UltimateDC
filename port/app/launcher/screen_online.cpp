@@ -12,6 +12,7 @@
 #include "lan.h"
 #include "launcher/state.h"
 #include "launcher/ui.h"
+#include "ui/lang.h"
 
 namespace Launcher {
 
@@ -96,7 +97,7 @@ void DrawLan(State& s) {
     Ui::PopFont();
     ImGui::SameLine();
     ImGui::BeginDisabled(s.lan_searching);
-    if (ImGui::Button("Search##lan")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Search##lan"))) {
         s.SearchLan();
     }
     ImGui::EndDisabled();
@@ -150,7 +151,7 @@ void DrawLan(State& s) {
             ImGui::TableNextColumn();
             const std::string address = App::Invite::Address(room.address, room.port);
             const bool chosen = s.config.join == address && s.config.host == 0;
-            if (chosen ? Ui::AccentButton("Joining") : ImGui::Button("Join")) {
+            if (chosen ? Ui::AccentButton("Joining") : ImGui::Button(App::Ui::Lang::Tr("Join"))) {
                 JoinOrAsk(s, address, room.name, room.password);
             }
             ImGui::PopID();
@@ -171,7 +172,7 @@ void DrawJoin(State& s) {
         Ui::TextDim(fmt::format("Rooms in the lobby at {}", Lobby::NormalizeUrl(s.config.lobby)));
         ImGui::SameLine();
         ImGui::BeginDisabled(s.rooms_loading);
-        if (ImGui::Button("Refresh")) {
+        if (ImGui::Button(App::Ui::Lang::Tr("Refresh"))) {
             s.FetchRooms();
         }
         ImGui::EndDisabled();
@@ -243,7 +244,7 @@ void DrawJoin(State& s) {
                     ImGui::TableNextColumn();
                     const std::string address = fmt::format("{}:{}", room.address, room.port);
                     const bool chosen = s.config.join == address && s.config.host == 0;
-                    if (chosen ? Ui::AccentButton("Joining") : ImGui::Button("Join")) {
+                    if (chosen ? Ui::AccentButton("Joining") : ImGui::Button(App::Ui::Lang::Tr("Join"))) {
                         JoinOrAsk(s, address, room.name, room.password);
                     }
                     ImGui::PopID();
@@ -269,7 +270,7 @@ void DrawJoin(State& s) {
         Ui::InputText("##address_password", &f.address_password, ImGuiInputTextFlags_Password, "password, if any");
     }
     ImGui::SameLine();
-    if (ImGui::Button("Paste invite")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Paste invite"))) {
         f.paste_note.clear();
         if (char* text = SDL_GetClipboardText()) {
             const auto pasted = App::Invite::Parse(text);
@@ -284,7 +285,7 @@ void DrawJoin(State& s) {
     }
     ImGui::SameLine();
     ImGui::BeginDisabled(!room.ok);
-    if (ImGui::Button("Join this room")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Join this room"))) {
         // an invite brings its password; mh4u-app.ini keeps the address and the password
         JoinRoom(s, App::Invite::Address(room.host, room.port), room.code ? room.password : f.address_password, "");
         f.address = room.code ? App::Invite::Format(room.host, room.port, room.password)
@@ -314,7 +315,7 @@ void DrawHost(State& s) {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Port (UDP)");
+        ImGui::TextUnformatted(App::Ui::Lang::Tr("Port (UDP)"));
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(160.0f * scale);
         if (ImGui::InputInt("##port", &f.port, 1, 10)) {
@@ -323,28 +324,28 @@ void DrawHost(State& s) {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Room name");
+        ImGui::TextUnformatted(App::Ui::Lang::Tr("Room name"));
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         Ui::InputText("##name", &f.name, 0, "MH4U");
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Password");
+        ImGui::TextUnformatted(App::Ui::Lang::Tr("Password"));
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         Ui::InputText("##password", &f.password, ImGuiInputTextFlags_Password, "none: anyone may join");
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Players");
+        ImGui::TextUnformatted(App::Ui::Lang::Tr("Players"));
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(260.0f * scale);
         Ui::SliderInt("##members", &f.members, 2, 16, "%d", s.pad);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("In the lobby");
+        ImGui::TextUnformatted(App::Ui::Lang::Tr("In the lobby"));
         ImGui::TableNextColumn();
         const bool can_list = !s.config.lobby.empty() && !s.config.token.empty();
         ImGui::BeginDisabled(!can_list);
@@ -451,7 +452,7 @@ void DrawOnline(State& s) {
     ImGui::TextUnformatted(RoomSummary(s).c_str());
     if (s.config.host > 0 || !s.config.join.empty()) {
         ImGui::SameLine();
-        if (ImGui::Button("Play solo")) {
+        if (ImGui::Button(App::Ui::Lang::Tr("Play solo"))) {
             s.Change([](App::Config& c) {
                 c.join.clear();
                 c.host = 0;

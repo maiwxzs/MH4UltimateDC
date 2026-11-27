@@ -179,6 +179,7 @@ enum class RowId : int {
     GameplayKick,
     GameplayTarget,
     GameplayTextSkip,
+    GameplayResultSkip,
     GameplaySkip,
     GameplaySkipEnd,
     GameplaySkipEndHold,

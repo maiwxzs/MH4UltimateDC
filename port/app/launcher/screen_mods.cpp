@@ -13,6 +13,7 @@
 #include "common/logging/log.h"
 #include "launcher/state.h"
 #include "launcher/ui.h"
+#include "ui/lang.h"
 
 namespace Launcher {
 
@@ -298,7 +299,7 @@ bool RowActions(State& s, const ModInfo& mod, bool busy) {
     }
     focused = focused || ImGui::IsItemFocused();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("Earlier in the order (later mods win)");
+        ImGui::SetTooltip("%s", App::Ui::Lang::Tr("Earlier in the order (later mods win)"));
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
@@ -308,7 +309,7 @@ bool RowActions(State& s, const ModInfo& mod, bool busy) {
     }
     focused = focused || ImGui::IsItemFocused();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("Later in the order");
+        ImGui::SetTooltip("%s", App::Ui::Lang::Tr("Later in the order"));
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
@@ -316,7 +317,7 @@ bool RowActions(State& s, const ModInfo& mod, bool busy) {
     const bool remove = Ui::IconButton("##remove", Ui::Glyph::Remove);
     focused = focused || ImGui::IsItemFocused();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("Remove from the library");
+        ImGui::SetTooltip("%s", App::Ui::Lang::Tr("Remove from the library"));
     }
     if (remove) {
         Dialog d;
@@ -678,17 +679,17 @@ void CatalogDetails(State& s, const CatalogEntry& e, bool busy) {
         ImGui::EndDisabled();
         ImGui::SameLine();
     }
-    if (e.direct ? ImGui::Button("Open its page") : Ui::AccentButton("Open its page")) {
+    if (e.direct ? ImGui::Button(App::Ui::Lang::Tr("Open its page")) : Ui::AccentButton("Open its page")) {
         OpenUrl(s, e.page_url);
     }
     if (e.installed) {
         ImGui::SameLine();
-        if (ImGui::Button("Remove")) {
+        if (ImGui::Button(App::Ui::Lang::Tr("Remove"))) {
             AskRemove(s, e.installed_id.empty() ? e.id : e.installed_id, e.name, e.installed_as == "textures");
         }
         if (e.kind == "textures") {
             ImGui::SameLine();
-            if (ImGui::Button("Open the texture folder")) {
+            if (ImGui::Button(App::Ui::Lang::Tr("Open the texture folder"))) {
                 OpenFolder(s, c.textures_folder);
             }
         }
@@ -715,7 +716,7 @@ void CatalogDetails(State& s, const CatalogEntry& e, bool busy) {
     if (textures_off) {
         Ui::StatusLine(Ui::Status::Warn, "Texture packs are off", "Packs show only with that setting on (Settings).");
         ImGui::BeginDisabled(busy);
-        if (ImGui::Button("Turn on Texture packs")) {
+        if (ImGui::Button(App::Ui::Lang::Tr("Turn on Texture packs"))) {
             TurnOnTextures(s);
         }
         ImGui::EndDisabled();
@@ -790,22 +791,22 @@ void DrawCatalog(State& s, bool busy) {
             "");
     };
     FocusNext(s, !busy);
-    if (ImGui::Button("Add a texture pack...")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Add a texture pack..."))) {
         s.Pick(false, "A texture pack's archive", "Archives", {"zip", "7z", "tar", "gz", "tgz"}, install);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Browse in the launcher...##textures")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Browse in the launcher...##textures"))) {
         s.Pick(false, "A texture pack's archive", "Archives", {"zip", "7z", "tar", "gz", "tgz"}, install, true);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Open the texture folder")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Open the texture folder"))) {
         OpenFolder(s, c.textures_folder.empty()
                           ? fmt::format("{}/load/textures/{:016X}", Tools::UserDir(),
                                         Checks::RegionOf(s.game.program_id).program_id)
                           : c.textures_folder);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Check for a newer catalog")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Check for a newer catalog"))) {
         c.fetched = false;
         RefreshCatalog(s, true);
     }
@@ -1054,7 +1055,7 @@ void DrawMods(State& s) {
             Ui::StatusLine(Ui::Status::Error, "Python 3.10 or newer is needed", Tools::PythonHint(s.python));
         }
         FocusNext(s);
-        if (ImGui::Button("Check again")) {
+        if (ImGui::Button(App::Ui::Lang::Tr("Check again"))) {
             s.ProbeTools();
         }
         ImGui::EndChild();
@@ -1084,26 +1085,26 @@ void DrawMods(State& s) {
     // (the callbacks may run later, from a dialog: the state outlives them)
     const auto add = [&s](const std::string& path) { Change(s, {"add", path}, "Adding a mod"); };
     FocusNext(s, !busy);
-    if (ImGui::Button("Add a mod's folder...")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Add a mod's folder..."))) {
         s.Pick(true, "A mod's folder", "", {}, add);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Add an archive...")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Add an archive..."))) {
         s.Pick(false, "A mod's archive", "Archives (.zip, .7z, .tar)", {"zip", "7z", "tar", "gz", "tgz"}, add);
     }
     ImGui::SameLine();
     // either one, in the launcher's own browser
-    if (ImGui::Button("Browse in the launcher...##mods")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Browse in the launcher...##mods"))) {
         s.Pick(true, "A mod's folder or archive", "Archives (.zip, .7z, .tar)", {"zip", "7z", "tar", "gz", "tgz"},
                add, true);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Refresh")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Refresh"))) {
         RefreshMods(s);
     }
     ImGui::SameLine();
     ImGui::BeginDisabled(s.mods.deploy_state == "up_to_date" || s.mods.deploy_state.empty());
-    if (ImGui::Button("Put them in place now")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Put them in place now"))) {
         DeployMods(s, false, nullptr);
     }
     ImGui::EndDisabled();

@@ -222,7 +222,7 @@ def test_texts_ascii_and_short(rows, sections):
 
 
 # mh4u.ini's keys the menu writes (Menu::SetGame), as before the reorganisation
-GAME_KEYS = {"fps", "refresh_rate", "fov", "text_skip", "widescreen", "wide_render", "hud_edges", "touch_overlay", "quest_overlay",
+GAME_KEYS = {"fps", "refresh_rate", "fov", "text_skip", "result_skip", "widescreen", "wide_render", "hud_edges", "touch_overlay", "quest_overlay",
              "target_overlay", "kick", "target", "skip", "skip_end", "skip_end_hold", "skip_hint", "dither",
              "stereo_3d", "antialiasing", "bloom", "depth_of_field", "motion_blur", "radial_blur", "haze",
              "net_sync"}

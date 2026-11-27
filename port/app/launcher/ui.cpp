@@ -1,4 +1,5 @@
 #include "launcher/ui.h"
+#include "ui/lang.h"
 
 #include <algorithm>
 #include <cctype>
@@ -12,6 +13,9 @@
 #include "common/logging/log.h"
 
 namespace Launcher::Ui {
+
+// the launcher's texts in the language chosen (ui/lang.h; English without a translation)
+using App::Ui::Lang::Tr;
 
 namespace {
 
@@ -226,7 +230,7 @@ void TextColored(ImU32 color, const std::string& text) {
     if (wrap) {
         ImGui::PushTextWrapPos(0.0f);
     }
-    ImGui::TextUnformatted(text.c_str());
+    ImGui::TextUnformatted(Tr(text.c_str()));
     if (wrap) {
         ImGui::PopTextWrapPos();
     }
@@ -239,7 +243,7 @@ void TextDim(const std::string& text) {
 
 void Heading(const std::string& text) {
     PushFont(1.45f, true);
-    ImGui::TextUnformatted(text.c_str());
+    ImGui::TextUnformatted(Tr(text.c_str()));
     PopFont();
 }
 
@@ -286,7 +290,7 @@ void StatusLine(Status status, const std::string& label, const std::string& deta
     ImGui::SameLine();
     ImGui::BeginGroup();
     ImGui::PushFont(bold, 0.0f);
-    ImGui::TextUnformatted(label.c_str());
+    ImGui::TextUnformatted(Tr(label.c_str()));
     ImGui::PopFont();
     if (!detail.empty()) {
         TextDim(detail);
@@ -311,6 +315,7 @@ void Lock(ImU32 color) {
 }
 
 bool PlayButton(const char* label, const ImVec2& size_arg, bool ready) {
+    label = Tr(label);
     const bool pressed = ImGui::InvisibleButton(label, size_arg, ImGuiButtonFlags_EnableNav);
     const bool hovered = ImGui::IsItemHovered();
     const bool held = ImGui::IsItemActive();
@@ -359,13 +364,14 @@ bool AccentButton(const char* label, const ImVec2& size) {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color::AccentDark);
     ImGui::PushStyleColor(ImGuiCol_Text, Color::OnAccent);
     ImGui::PushFont(bold, 0.0f);
-    const bool pressed = ImGui::Button(label, size);
+    const bool pressed = ImGui::Button(Tr(label), size);
     ImGui::PopFont();
     ImGui::PopStyleColor(4);
     return pressed;
 }
 
 bool Tab(const char* label, bool selected) {
+    label = Tr(label);
     const char* label_end = ImGui::FindRenderedTextEnd(label);
     ImGui::PushFont(bold, std::round(FontSize() * 1.1f));
     const ImVec2 text = ImGui::CalcTextSize(label, label_end);
@@ -497,6 +503,7 @@ void EndCard() {
 }
 
 bool Toggle(const char* label, bool* value) {
+    label = Tr(label);
     const char* label_end = ImGui::FindRenderedTextEnd(label);
     const float h = ImGui::GetFrameHeight();
     const float w = h * 1.8f;
@@ -572,7 +579,7 @@ void KeyHint(const char* key, const char* action) {
     PopFont();
     ImGui::SameLine(0, 6.0f * Scale());
     PushFont(0.85f);
-    ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(Color::Dim), "%s", action);
+    ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(Color::Dim), "%s", Tr(action));
     PopFont();
 }
 
@@ -583,7 +590,7 @@ void TableHeaders(std::initializer_list<const char*> names) {
         ImGui::TableSetColumnIndex(column++);
         ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
         PushFont(0.85f, true);
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(Color::Dim), "%s", name);
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(Color::Dim), "%s", Tr(name));
         PopFont();
     }
 }

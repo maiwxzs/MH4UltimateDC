@@ -5,6 +5,7 @@
 
 #include "launcher/state.h"
 #include "launcher/ui.h"
+#include "ui/lang.h"
 
 namespace Launcher {
 
@@ -70,12 +71,12 @@ void DrawHome(State& s) {
     ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(Ui::Color::Dim), "ROOM");
     Ui::PopFont();
     Ui::TextColored(Ui::Color::Text, RoomSummary(s));
-    if (ImGui::Button("Change room")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Change room"))) {
         s.GoTo(Screen::Online);
     }
     if (s.config.host > 0 || !s.config.join.empty()) {
         ImGui::SameLine();
-        if (ImGui::Button("Play solo")) {
+        if (ImGui::Button(App::Ui::Lang::Tr("Play solo"))) {
             s.Change([](App::Config& c) {
                 c.join.clear();
                 c.host = 0;
@@ -85,7 +86,7 @@ void DrawHome(State& s) {
     }
     Ui::EndCard();
     ImGui::Spacing();
-    if (ImGui::Button("Quit")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Quit"))) {
         s.result = Result::Quit;
         s.done = true;
     }
@@ -149,7 +150,7 @@ void DrawHome(State& s) {
     ImGui::TextUnformatted(mods_text.c_str());
     ImGui::PopTextWrapPos();
     Ui::SameLineRight(button_width);
-    if (ImGui::Button("Manage")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Manage"))) {
         s.GoTo(Screen::Mods);
     }
     Ui::EndCard();

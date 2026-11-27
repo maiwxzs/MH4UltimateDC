@@ -2,6 +2,7 @@
 #include "netsync.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <atomic>
 #include <chrono>
 #include <cctype>
@@ -120,6 +121,8 @@ struct Options {
     float skip_end_hold = 1.0f;  // skip_end_hold / MH4U_SKIP_END_HOLD: seconds they are held
     u32 text_skip_button = 0x2000;  // text_skip / MH4U_TEXT_SKIP: 3DS button that shows the rest of a
                                     // page of text being typed out at once, as RPGs do (A; off: none)
+    u32 result_skip_buttons = 0x800;  // result_skip / MH4U_RESULT_SKIP: 3DS buttons that, held, run
+                                      // the quest results' and rewards' animations to their end (ZR)
     u32 skip_panel = 0xb;   // skip_panel: the touch-screen button whose tap the skip button makes
                             // (the panel manager's Skip, 0xb, as the stylus's tap on it shows)
     int skip_hint = 1;      // skip_hint / MH4U_SKIP_HINT: 0 off, 1 a hint on screen, 2 flashing
@@ -132,6 +135,8 @@ struct Options {
                                   // part of slot n all the time (to check the drawing)
     bool hud_edges = true;  // hud_edges / MH4U_HUD_EDGES: with wide_render, HUD to the edges
     u32 trace_layout = 0;   // trace_layout / MH4U_TRACE_LAYOUT: log HUD objects every n frames
+    bool trace_actions = false;  // trace_actions / MH4U_TRACE_ACTIONS: log the hunters' actions as
+                                 // they change (to find carving's and gathering's)
     NetSync::Mode net_sync = NetSync::Mode::Session;  // net_sync / MH4U_NET_SYNC
     float net_sync_slack = 0;  // net_sync_slack / MH4U_NET_SYNC_SLACK: ms, 0 = the default
     u32 filters_off = 0;    // bloom, motion_blur, depth_of_field, radial_blur, haze = off: the
@@ -273,6 +278,8 @@ void Set(Options& o, const std::string& key, const std::string& value) {
         o.target_button = PadBit(value);
     } else if (key == "skip") {
         o.skip_button = PadBit(value);
+    } else if (key == "result_skip") {
+        o.result_skip_buttons = IsOff(value) ? 0 : PadBits(value);
     } else if (key == "text_skip") {
         o.text_skip_button = IsOff(value) ? 0 : PadBit(value);
     } else if (key == "skip_end") {
@@ -299,6 +306,8 @@ void Set(Options& o, const std::string& key, const std::string& value) {
         o.net_sync_slack = std::max(0.0f, std::strtof(value.c_str(), nullptr));
     } else if (key == "hud_edges") {
         o.hud_edges = IsOn(value);
+    } else if (key == "trace_actions") {
+        o.trace_actions = IsOn(value);
     } else if (key == "trace_layout") {
         o.trace_layout = static_cast<u32>(std::max(0L, std::strtol(value.c_str(), nullptr, 10)));
     } else if (key == "trace_frames") {
@@ -343,6 +352,7 @@ Options LoadOptions(std::vector<std::string>& log) {
         {"MH4U_REFRESH_RATE", "refresh_rate"},
         {"MH4U_WIDESCREEN", "widescreen"},
         {"MH4U_TEXT_SKIP", "text_skip"},
+        {"MH4U_RESULT_SKIP", "result_skip"},
         {"MH4U_FOV", "fov"},
         {"MH4U_WIDE_RENDER", "wide_render"},
         {"MH4U_TRACE_FRAMES", "trace_frames"},
@@ -364,6 +374,7 @@ Options LoadOptions(std::vector<std::string>& log) {
         {"MH4U_RENDER_FLAGS_SET", "render_flags_set"},
         {"MH4U_RENDER_FLAGS_CLEAR", "render_flags_clear"},
         {"MH4U_TRACE_LAYOUT", "trace_layout"},
+        {"MH4U_TRACE_ACTIONS", "trace_actions"},
         {"MH4U_NET_SYNC", "net_sync"},
         {"MH4U_NET_SYNC_SLACK", "net_sync_slack"},
         {"MH4U_BLOOM", "bloom"},
@@ -965,6 +976,70 @@ void GuiTextUpdate(RCtx* ctx, RFunc original) {
     original(ctx);
 }
 
+// ── The quest's results and rewards (cResult, the singleton at 0x00ef32b4; its update
+// 0x00acccd0 runs a state machine of 21 steps at +0x4). Each animated step sets a countdown in
+// frames at +0x14 (seconds times 120, or from a float) and waits until it is down to the step's
+// mark at +0x1c; the end of the update counts it down by the frame's time (+0x18 the fraction).
+// Steps that wait for the player's choice read the pad instead, so they still wait. Read from the
+// disassembly (USA v1.3.0, confidence medium). While result_skip is held, each countdown is put at
+// its mark before the update: the animations run to their end at once.
+constexpr u32 RESULT_COUNTDOWN = 0x14;
+constexpr u32 RESULT_MARK = 0x1c;
+bool result_skip_held = false;
+
+void ResultUpdate(RCtx* ctx, RFunc original) {
+    const u32 result = ctx->r[0];
+    if (result_skip_held && result != 0) {
+        const s32 countdown = static_cast<s32>(rd32(ctx, result + RESULT_COUNTDOWN));
+        const s32 mark = static_cast<s32>(rd32(ctx, result + RESULT_MARK));
+        if (countdown > mark) {
+            wr32(ctx, result + RESULT_COUNTDOWN, static_cast<u32>(std::max(mark, 0)));
+        }
+    }
+    original(ctx);
+}
+
+// ── The hunters' actions (uMHchar, the base of hunters, monsters and NPCs): its move
+// 0x00b48880 (vtable +0x24) runs each frame. From the debug property names the game registers
+// (0x00b2b380, USA v1.3.0, confidence high for the offsets): the char's base work at +0xe30
+// (pbw: act_st at +0x371, act_no at +0x372) and its player work at +0xa29c (pw: mNowMotSpeed,
+// the current motion speed, a float at +0xc0). The classes whose vtables use that registration
+// are the hunters' (one per weapon type) and a few others. trace_actions logs a change of
+// action of those, to tell carving's and gathering's numbers before they get faster.
+constexpr u32 CHAR_BASE_WORK = 0xe30;
+constexpr u32 BASE_ACT_ST = 0x371;
+constexpr u32 BASE_ACT_NO = 0x372;
+constexpr u32 CHAR_PLAYER_WORK = 0xa29c;
+constexpr u32 PLAYER_MOTION_SPEED = 0xc0;
+constexpr u32 HUNTER_VTABLES[] = {0x00e6bcd4, 0x00e6edbc, 0x00e6ef2c, 0x00e6f09c, 0x00e6f20c, 0x00e6f37c, 0x00e6f4ec, 0x00e6f65c, 0x00e6f7cc, 0x00e6f93c, 0x00e6faac, 0x00e6fc1c, 0x00e6fefc};
+std::unordered_map<u32, u32> traced_actions;  // char -> act_no << 8 | act_st last logged
+
+void CharMove(RCtx* ctx, RFunc original) {
+    const u32 chr = ctx->r[0];
+    original(ctx);
+    if (!options.trace_actions || chr == 0) {
+        return;
+    }
+    const u32 vtable = rd32(ctx, chr);
+    if (std::find(std::begin(HUNTER_VTABLES), std::end(HUNTER_VTABLES), vtable) == std::end(HUNTER_VTABLES)) {
+        return;
+    }
+    const u32 base = rd32(ctx, chr + CHAR_BASE_WORK);
+    if (base == 0) {
+        return;
+    }
+    const u32 action = static_cast<u32>(rd8(ctx, base + BASE_ACT_NO)) << 8 | rd8(ctx, base + BASE_ACT_ST);
+    auto [it, added] = traced_actions.try_emplace(chr, ~0u);
+    if (it->second == action) {
+        return;
+    }
+    it->second = action;
+    const u32 work = rd32(ctx, chr + CHAR_PLAYER_WORK);
+    const float speed = work ? ReadF32(ctx, work + PLAYER_MOTION_SPEED) : 0.0f;
+    LOG_INFO(Frontend, "actions: frame {} hunter {:08X} (vtable {:08X}) act_no {} act_st {} motion speed {:.2f}",
+             frames, chr, vtable, action >> 8, action & 0xff, speed);
+}
+
 /// sMhPad::update(this): turns pad state and the panels' injected bits into actions.
 /// The kick button injects the kick for the next update, like the touch panel does (the
 /// button keeps its own action too, so pick one the game doesn't use).
@@ -990,6 +1065,7 @@ void MhPadUpdate(RCtx* ctx, RFunc original) {
         }
         target_held = now;
     }
+    result_skip_held = options.result_skip_buttons && (held & options.result_skip_buttons) == options.result_skip_buttons;
     // the text skip's button: the frame it was pressed (GuiTextUpdate completes the page then)
     if (options.text_skip_button) {
         const bool now = (held & options.text_skip_button) != 0;
@@ -1584,6 +1660,8 @@ constexpr Hook HOOKS[] = {
     {0x00288f4c, "PanelManager::isTapped", PanelIsTapped},
     {0x00694c98, "sMhPad::update", MhPadUpdate},
     {0x002859f8, "cGUIInstText::updateTyping", GuiTextUpdate},
+    {0x00acccd0, "cResult::update", ResultUpdate},
+    {0x00b48880, "uMHchar::move", CharMove},
     {0x00bfcfd8, "sMhCamera::turnByInput", CameraTurnByInput},
     {0x00b7c010, "QuestFlow::startQuest", StartQuest},
     {0x0065c18c, "aQuest::playing", QuestPlaying},
@@ -1933,9 +2011,9 @@ bool SetOption(const std::string& key, const std::string& value) {
     static constexpr std::string_view live[] = {
         "fps", "refresh_rate", "fov", "dither", "stereo_3d", "antialiasing", "render_flags_set", "render_flags_clear",
         "kick",
-        "target", "skip", "skip_panel", "text_skip", "skip_hint", "skip_end", "skip_end_hold", "touch_overlay",
+        "target", "skip", "skip_panel", "text_skip", "result_skip", "skip_hint", "skip_end", "skip_end_hold", "touch_overlay",
         "quest_overlay", "target_overlay",
-        "hud_edges", "trace_frames", "trace_layout", "trace_panels", "bloom", "motion_blur",
+        "hud_edges", "trace_frames", "trace_layout", "trace_actions", "trace_panels", "bloom", "motion_blur",
         "depth_of_field", "radial_blur", "haze", "trace_filters"};
     if (std::find(std::begin(live), std::end(live), key) == std::end(live)) {
         return false;

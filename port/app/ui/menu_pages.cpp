@@ -715,6 +715,7 @@ void Menu::DrawGameplay() {
 
     Section(S::GameplayAfterQuest);
     if (BeginSettings("##after_quest")) {
+        DrawButtonList(R::GameplayResultSkip, "result_skip");
         DrawButtonList(R::GameplaySkip, "skip");
         if (BeginRow(R::GameplaySkipEnd)) {
             std::string combo = ButtonsOf(Game("skip_end"));

@@ -11,6 +11,7 @@
 #include "common/logging/log.h"
 #include "launcher/state.h"
 #include "launcher/ui.h"
+#include "ui/lang.h"
 
 #ifndef MH4U_PORT_COMMIT
 #define MH4U_PORT_COMMIT ""
@@ -181,7 +182,7 @@ void DrawUpdateCard(State& s) {
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
-    if (ImGui::Button("What's new##update_notes")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("What's new##update_notes"))) {
         OpenPage(s, s.updates.url);
     }
     Ui::EndCard();
@@ -220,13 +221,13 @@ void DrawUpdateSettings(State& s) {
         }
         ImGui::SameLine();
     }
-    if (ImGui::Button("Check now##check_updates")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Check now##check_updates"))) {
         s.CheckForUpdate(true);
     }
     ImGui::EndDisabled();
     if (!u.url.empty()) {
         ImGui::SameLine();
-        if (ImGui::Button("What's new##settings_notes")) {
+        if (ImGui::Button(App::Ui::Lang::Tr("What's new##settings_notes"))) {
             OpenPage(s, u.url);
         }
     }

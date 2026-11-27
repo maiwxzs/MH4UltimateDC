@@ -1,4 +1,5 @@
 #include "launcher/launcher.h"
+#include "ui/lang.h"
 #include "icon.h"
 
 #include <algorithm>
@@ -231,7 +232,7 @@ void DrawPicking(State& s) {
             ImGui::SetItemDefaultFocus();
         }
         ImGui::SameLine();
-        const bool cancel = ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
+        const bool cancel = ImGui::Button(App::Ui::Lang::Tr("Cancel")) || ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
                             ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false);
         if (browse || cancel) {
             ImGui::CloseCurrentPopup();
@@ -435,7 +436,7 @@ void TopBar(State& s) {
         RequestQuit(s);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Close (Alt+F4)");
+        ImGui::SetTooltip("%s", App::Ui::Lang::Tr("Close (Alt+F4)"));
     }
     // a hairline under the bar
     const ImVec2 at = ImGui::GetCursorScreenPos();
@@ -622,7 +623,7 @@ void DrawJob(State& s) {
                 ImGui::SetKeyboardFocusHere();
                 job.focus_set = true;
             }
-            if (ImGui::Button("Cancel")) {
+            if (ImGui::Button(App::Ui::Lang::Tr("Cancel"))) {
                 job.cancel_asked = true;
                 job.focus_set = false;
             }
@@ -1366,6 +1367,7 @@ Result Run(App::Config& config, bool show) {
     GImGui->ConfigNavWindowingKeyNext = 0;
     GImGui->ConfigNavWindowingKeyPrev = 0;
     GImGui->NavWindowingToggleKey = ImGuiKey_None;
+    App::Ui::Lang::Set(config.language); // the launcher's language, as the menu's (ui/lang.h)
     Ui::LoadFonts();
     ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer2_Init(renderer);

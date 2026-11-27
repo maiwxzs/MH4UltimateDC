@@ -421,6 +421,10 @@ const Row ROWS[] = {
      "While a text is typed out letter by letter, this button shows the rest of the page at once, as in RPGs.",
      "text skip dialog dialogue message letters typing instant rpg fast talk npc texto", "", "", false, false,
      "mh4u.ini text_skip"},
+    {"gameplay.result_skip", "gameplay.after_quest", S, "Quick results and rewards", nullptr,
+     "Held after a quest: the results' and rewards' animations end at once. Choices still wait for you.",
+     "result rewards reward skip animation fast quest complete items recompensas resultados", "", "", false, false,
+     "mh4u.ini result_skip"},
     {"gameplay.skip", "gameplay.after_quest", S, "Skip the scene", nullptr,
      "Once a quest is complete, taps the touch screen's Skip, which skips the scene of the monster's end. It can "
      "share the kick's button.",

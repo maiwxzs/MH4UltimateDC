@@ -9,6 +9,7 @@
 #include <imgui_internal.h>
 
 #include "launcher/ui.h"
+#include "ui/lang.h"
 
 namespace Launcher::Browse {
 
@@ -422,7 +423,7 @@ Outcome Browser::Draw(bool pad) {
     const bool entered = Ui::InputText("##path", &typed, ImGuiInputTextFlags_EnterReturnsTrue,
                                        "A folder or a file: type or paste its path");
     ImGui::SameLine();
-    if (ImGui::Button("Go") || entered) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Go")) || entered) {
         Submit(outcome);
     }
     ImGui::Spacing();
@@ -465,12 +466,12 @@ Outcome Browser::Draw(bool pad) {
         ImGui::SameLine();
     }
     if (system) {
-        if (ImGui::Button("System file dialog...")) {
+        if (ImGui::Button(App::Ui::Lang::Tr("System file dialog..."))) {
             outcome = Outcome::System;
         }
         ImGui::SameLine();
     }
-    if (ImGui::Button("Cancel")) {
+    if (ImGui::Button(App::Ui::Lang::Tr("Cancel"))) {
         outcome = Outcome::Cancelled;
     }
     if (ImGui::IsWindowAppearing() && listing.entries.empty() && Paths::Parent(listing.folder).empty()) {

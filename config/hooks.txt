@@ -15,6 +15,8 @@
 0x00288f4c PanelManager::isTapped     # second screen: trace / later bind panels to keys
 0x00694c98 sMhPad::update             # second screen: trace / inject panel actions
 0x002859f8 cGUIInstText::updateTyping # text skip: a press shows the rest of the page being typed (text_skip)
+0x00acccd0 cResult::update            # result skip: held, the quest results' and rewards' animations end at once (result_skip)
+0x00b48880 uMHchar::move              # hunters' actions: trace_actions logs them (carving, gathering)
 0x00bfcfd8 sMhCamera::turnByInput     # mouse camera: the app's mouse turn added to the camera's input angles
 0x00b7c010 QuestFlow::startQuest      # quest start: rebuild the quest list until it has the quest (above 60 fps)
 0x006bc838 QuestHolder::releaseQuestList  # quest start: called, not wrapped, by the startQuest hook (its address by name in every version)
