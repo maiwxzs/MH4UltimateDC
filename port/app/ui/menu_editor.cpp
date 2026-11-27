@@ -13,8 +13,11 @@
 #include "ui/menu.h"
 #include "ui/menu_parts.h"
 #include "ui/nav.h"
+#include "ui/lang.h"
 
 namespace App::Ui {
+
+using Lang::Tr;
 
 using namespace MenuParts;
 
@@ -221,9 +224,9 @@ void Menu::DrawLayoutEditor() {
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoNav);
-    ImGui::TextUnformatted("Edit HUD layout");
+    ImGui::TextUnformatted(Tr("Edit HUD layout"));
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("Drag a view to move it, its corner to resize it.");
+    ImGui::TextWrapped("%s", Tr("Drag a view to move it, its corner to resize it."));
     ImGui::PopStyleColor();
     ImGui::TextWrapped("%s", EditorNumbers().c_str());
     if (const std::string note = EditorViewNote(); !note.empty()) {
@@ -255,13 +258,13 @@ void Menu::DrawLayoutEditor() {
         }
         ImGui::EndDisabled();
     }
-    if (ImGui::Button("Done")) {
+    if (ImGui::Button(Tr("Done"))) {
         EndLayoutEdit();
         layer.CloseMenu();
     }
     layer.Help("Keeps the views where they are (saved in mh4u.ini) and goes back to the game (A or Enter).");
     ImGui::SameLine();
-    if (ImGui::Button("Reset")) {
+    if (ImGui::Button(Tr("Reset"))) {
         // the touch screen's corner at its scale, the target camera under the map
         for (int i = 0; i < 2; ++i) {
             SetGame(PANEL_VIEW_KEYS[i], views[i].on ? (i == 0 ? "map" : "on") : "off");
@@ -269,7 +272,7 @@ void Menu::DrawLayoutEditor() {
     }
     layer.Help("The map in the touch screen's corner at its scale, the target camera under it (X or Backspace).");
     ImGui::SameLine();
-    if (ImGui::Button("Cancel")) {
+    if (ImGui::Button(Tr("Cancel"))) {
         CancelLayoutEdit();
     }
     layer.Help("Puts them back as they were (Esc, or a controller's B).");

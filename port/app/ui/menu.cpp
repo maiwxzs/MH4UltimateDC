@@ -24,9 +24,12 @@
 #include "ui/multiplayer_tab.h"
 #include "ui/nav.h"
 #include "ui/options.h"
+#include "ui/lang.h"
 #include "window.h"
 
 namespace App::Ui {
+
+using Lang::Tr;
 
 using namespace MenuParts;
 
@@ -67,7 +70,7 @@ constexpr const char* DEFAULT_FOOTER = "Saved when the menu closes. The old Game
 
 /// `help` with its {key:...} placeholder replaced by `key`.
 std::string WithKey(const char* help, const std::string& key) {
-    std::string text = help;
+    std::string text = Tr(help);  // translated with its placeholder, then the key put in
     if (const auto at = text.find("{key:"); at != std::string::npos) {
         const auto end = text.find('}', at);
         text.replace(at, end == std::string::npos ? std::string::npos : end - at + 1, key);
@@ -181,6 +184,12 @@ void Menu::Closed() {
             case AppSetting::FpsCounter:
                 file.fps_counter = now.fps_counter;
                 break;
+            case AppSetting::MenuScale:
+                file.menu_scale = now.menu_scale;
+                break;
+            case AppSetting::Language:
+                file.language = now.language;
+                break;
             case AppSetting::CustomTextures:
                 file.custom_textures = now.custom_textures;
                 break;
@@ -199,6 +208,20 @@ void Menu::Closed() {
                 file.mouse_invert_y = now.mouse_invert_y;
                 file.mouse_invert_x = now.mouse_invert_x;
                 file.mouse_deadzone = now.mouse_deadzone;
+                file.stick_deadzone = now.stick_deadzone;
+                file.stick_outer = now.stick_outer;
+                file.stick_curve = now.stick_curve;
+                file.stick_anti_deadzone = now.stick_anti_deadzone;
+                file.camera_deadzone = now.camera_deadzone;
+                file.camera_outer = now.camera_outer;
+                file.camera_curve = now.camera_curve;
+                file.camera_stick = now.camera_stick;
+                file.camera_speed = now.camera_speed;
+                file.camera_vertical = now.camera_vertical;
+                file.camera_invert_x = now.camera_invert_x;
+                file.camera_invert_y = now.camera_invert_y;
+                file.pad_buttons = now.pad_buttons;
+                file.pad_extra = now.pad_extra;
                 file.item_prev = now.item_prev;
                 file.item_next = now.item_next;
                 file.stylus_key = now.stylus_key;
@@ -334,13 +357,13 @@ const char* Menu::HelpOf(RowId row) const {
     case R::ControlsKeyGuides:
         return help_key_guides.c_str();
     default:
-        return Index::Get(row).help;
+        return Tr(Index::Get(row).help);
     }
 }
 
 std::string Menu::LabelOf(RowId row) const {
     const std::string& label = key_labels[static_cast<int>(row)];
-    return label.empty() ? Index::ListedLabel(row) : label;
+    return label.empty() ? Tr(Index::ListedLabel(row)) : label;
 }
 
 // ── The window ──
@@ -458,7 +481,7 @@ void Menu::DrawHeader() {
     ImGui::SameLine();
     if (ImGui::Button(quit) || open_quit) {
         open_quit = false;
-        ImGui::OpenPopup("Quit?");
+        ImGui::OpenPopup(Tr("Quit?"));
     }
     ItemHelp(R::HeaderQuit);
     ImGui::SameLine();
@@ -472,13 +495,13 @@ void Menu::DrawHeader() {
 
 void Menu::DrawQuitQuestion() {
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::BeginPopupModal("Quit?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+    if (ImGui::BeginPopupModal(Tr("Quit?"), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28.0f);
         ImGui::TextUnformatted("Quit Monster Hunter 4 Ultimate? Save in the game first: what you did since your "
                                "last save is lost.");
         ImGui::PopTextWrapPos();
         ImGui::Spacing();
-        if (ImGui::Button("Quit")) {
+        if (ImGui::Button(Tr("Quit"))) {
             ImGui::CloseCurrentPopup();
             layer.CloseMenu(); // its changes are saved first
             layer.Post([&window = layer.window] {
@@ -487,7 +510,7 @@ void Menu::DrawQuitQuestion() {
             });
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel") || CancelPressed()) {
+        if (ImGui::Button(Tr("Cancel")) || CancelPressed()) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SetItemDefaultFocus();
@@ -521,7 +544,7 @@ void Menu::DrawTabBar() {
             // the tab bar follows the menu's tab (a frame later); its tab items carry no page
             const ImGuiTabItemFlags flags =
                 i == static_cast<int>(tab) && bar_tab != static_cast<int>(tab) ? ImGuiTabItemFlags_SetSelected : 0;
-            if (ImGui::BeginTabItem(TABS[i], nullptr, flags)) {
+            if (ImGui::BeginTabItem(fmt::format("{}###tab{}", Tr(TABS[i]), i).c_str(), nullptr, flags)) {
                 shown = i;
                 ImGui::EndTabItem();
             }
@@ -639,12 +662,12 @@ void Menu::DrawFooter() {
     const ImGuiStyle& style = ImGui::GetStyle();
     ImGui::Separator();
     const char* help = layer.HelpText();
-    const char* text = !footer_note.empty() ? footer_note.c_str() : fresh || !help ? DEFAULT_FOOTER : help;
+    const char* text = !footer_note.empty() ? footer_note.c_str() : fresh || !help ? Tr(DEFAULT_FOOTER) : Tr(help);
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(text);
     ImGui::PopTextWrapPos();
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - style.WindowPadding.y - ImGui::GetTextLineHeight());
-    ImGui::TextDisabled("%s", Hints());
+    ImGui::TextDisabled("%s", Tr(Hints()));
 }
 
 const char* Menu::Hints() const {
@@ -972,7 +995,7 @@ void Menu::SectionAnchor(SectionId section) {
 
 void Menu::Section(SectionId section) {
     ImGui::Spacing();
-    ImGui::SeparatorText(Index::Get(section).title);
+    ImGui::SeparatorText(Tr(Index::Get(section).title));
     SectionAnchor(section);
     if (const Rules::Note& note = verdict.SectionNote(section); !note.Empty()) {
         // in a section that can't apply, its link is where the cursor lands
@@ -1025,7 +1048,7 @@ void Menu::EndRow(RowId row, bool help) {
 void Menu::RowLabel(RowId row) {
     // as drawn: the index's label (indented sub-rows: "    Across"), a key row's own
     const std::string& own = key_labels[static_cast<int>(row)];
-    const std::string drawn = own.empty() ? Index::Get(row).label : own;
+    const std::string drawn = own.empty() ? std::string(Tr(Index::Get(row).label)) : own;
     // (next start): R20, the screens while the touch screen has a window of its own
     const bool next = Index::Get(row).next_start || (row == R::TouchScreens && facts.windows_now);
     ImGui::AlignTextToFramePadding();
@@ -1034,7 +1057,7 @@ void Menu::RowLabel(RowId row) {
         return;
     }
     // amber once it was changed in this opening of the menu (R19)
-    const char* marker = "(next start)";
+    const char* marker = Tr("(next start)");
     const ImVec4 colour = ChangedNow(row) ? NOTE_COLOUR : ImGui::GetStyle().Colors[ImGuiCol_TextDisabled];
     const ImGuiStyle& style = ImGui::GetStyle();
     if (ImGui::CalcTextSize(drawn.c_str()).x + style.ItemSpacing.x + ImGui::CalcTextSize(marker).x <=
@@ -1092,13 +1115,14 @@ void Menu::ItemHelp(RowId row) {
 void Menu::DrawNote(const Rules::Note& note, int key, bool link_takes_first) {
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec4 colour = note.amber ? NOTE_COLOUR : style.Colors[ImGuiCol_TextDisabled];
-    const std::string link = note.link != R::Count ? "Go to " + LabelOf(note.link) : "";
-    const bool same_line = !link.empty() && ImGui::CalcTextSize(note.text.c_str()).x + style.ItemSpacing.x +
+    const std::string link = note.link != R::Count ? Tr("Go to") + std::string(" ") + LabelOf(note.link) : "";
+    const std::string note_text = Tr(note.text);
+    const bool same_line = !link.empty() && ImGui::CalcTextSize(note_text.c_str()).x + style.ItemSpacing.x +
                                                     ImGui::CalcTextSize(link.c_str()).x <=
                                                 ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleColor(ImGuiCol_Text, colour);
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextUnformatted(note.text.c_str());
+    ImGui::TextUnformatted(note_text.c_str());
     ImGui::PopTextWrapPos();
     ImGui::PopStyleColor();
     if (link.empty()) {
@@ -1123,15 +1147,15 @@ void Menu::LinkRow(const char* text, Tab to, const char* help, const char* id) {
     ImGui::TableSetColumnIndex(0);
     ImGui::AlignTextToFramePadding();
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("%s", text);
+    ImGui::TextDisabled("%s", Tr(text));
     ImGui::PopTextWrapPos();
     ImGui::TableSetColumnIndex(1);
     ImGui::AlignTextToFramePadding();
-    if (ImGui::TextLink(fmt::format("Go to {}##{}", TABS[static_cast<int>(to)], id).c_str())) {
+    if (ImGui::TextLink(fmt::format("{} {}##{}", Tr("Go to"), Tr(TABS[static_cast<int>(to)]), id).c_str())) {
         pending_tab = static_cast<int>(to);
         pending_tab_cursor = ImGui::GetIO().NavVisible;
     }
-    layer.Help(help);
+    layer.Help(Tr(help));
 }
 
 void Menu::BackendLine() {
@@ -1139,13 +1163,13 @@ void Menu::BackendLine() {
         return;
     }
     ImGui::PushStyleColor(ImGuiCol_Text, NOTE_COLOUR);
-    ImGui::TextUnformatted("The port's options may not work now: Display says why.");
+    ImGui::TextUnformatted(Tr("The port's options may not work now: Display says why."));
     ImGui::PopStyleColor();
     ImGui::SameLine();
     const ItemContext saved = item;
     item = {};
     item.first = false;
-    if (ImGui::TextLink("Go to Display##backend")) {
+    if (ImGui::TextLink(Tr("Go to Display##backend"))) {
         pending_tab = static_cast<int>(Tab::Display);
         pending_tab_cursor = ImGui::GetIO().NavVisible;
     }
@@ -1158,13 +1182,13 @@ void Menu::BackendLine() {
 bool Menu::Choose(const char* id, int& current, const std::vector<std::string>& labels, int disabled) {
     bool changed = false;
     const int count = static_cast<int>(labels.size());
-    const char* preview = current >= 0 && current < count ? labels[current].c_str() : "";
+    const char* preview = current >= 0 && current < count ? Tr(labels[current].c_str()) : "";
     if (ImGui::BeginCombo(id, preview)) {
         list_open = true;
         for (int i = 0; i < count; ++i) {
             const bool selected = i == current;
             ImGui::PushID(i);
-            if (ImGui::Selectable(labels[i].c_str(), selected, i == disabled ? ImGuiSelectableFlags_Disabled : 0) &&
+            if (ImGui::Selectable(Tr(labels[i].c_str()), selected, i == disabled ? ImGuiSelectableFlags_Disabled : 0) &&
                 !selected) {
                 current = i;
                 changed = true;

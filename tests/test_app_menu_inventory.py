@@ -65,7 +65,8 @@ def test_every_app_setting_changed_and_saved():
 
 
 def test_closed_copies_the_fields():
-    """What each AppSetting saves: today's fields, the two new ones and the touch taps."""
+    """What each AppSetting saves: today's fields, the two new ones, the touch taps, the controller's
+    sticks and buttons, and the menu's size."""
     text = sources()
     closed = re.search(r"void Menu::Closed\(\) \{(.*?)\n\}", text, re.S).group(1)
     closed = re.sub(r"//[^\n]*", "", closed)  # (a line in a comment isn't saved)
@@ -78,7 +79,11 @@ def test_closed_copies_the_fields():
         "keys", "stick_keys", "controller_auto", "button_params", "stick_params", "input_mode",
         "mouse_sensitivity", "mouse_vertical", "mouse_invert_y", "mouse_invert_x", "mouse_deadzone", "item_prev",
         "item_next", "stylus_key", "touch_screen_key", "key_guides", "key_guides_key", "pause_key",
-        "fast_forward_key", "touch_taps"}
+        "fast_forward_key", "touch_taps",
+        # the controller's sticks, buttons and extra buttons, and the menu's size
+        "stick_deadzone", "stick_outer", "stick_curve", "stick_anti_deadzone", "camera_deadzone", "camera_outer",
+        "camera_curve", "camera_stick", "camera_speed", "camera_vertical", "camera_invert_x", "camera_invert_y",
+        "pad_buttons", "pad_extra", "menu_scale", "language"}
 
 
 def test_layout_editor_key_lines():

@@ -23,6 +23,7 @@
 #include "ui/layer.h"
 #include "ui/menu.h"
 #include "ui/nav.h"
+#include "ui/lang.h"
 #include "window.h"
 
 namespace App::Ui {
@@ -212,6 +213,7 @@ Layer::Layer(Core::System& system_, Window& window_, Config& config_)
     ImGui_ImplSDL2_InitForOther(window.GetSDLWindow());
     ImGui_ImplSDL2_SetGamepadMode(ImGui_ImplSDL2_GamepadMode_AutoAll); // any controller, not the first
 
+    Lang::Set(config.language); // the menu's language (ui/lang.h)
     menu = std::make_unique<Menu>(*this);
     keyboard = std::make_shared<Keyboard>();
     system.RegisterSoftwareKeyboard(keyboard);
@@ -559,8 +561,10 @@ void Layer::LogEcho() {
 }
 
 void Layer::UpdateScale(float display_height) {
-    // a font about 1/34 of the window's height: 21 pixels at 720p, 32 at 1080p, 64 at 4K
-    const float size = std::clamp(std::round(display_height / 34.0f), 14.0f, 96.0f);
+    // a font about 1/34 of the window's height: 21 pixels at 720p, 32 at 1080p, 64 at 4K, times
+    // menu_scale (mh4u-app.ini [Display]): smaller or larger as the player likes
+    const float scale = static_cast<float>(std::clamp(config.menu_scale, 50, 150)) / 100.0f;
+    const float size = std::clamp(std::round(display_height / 34.0f * scale), 10.0f, 96.0f);
     if (size == font_size) {
         return;
     }

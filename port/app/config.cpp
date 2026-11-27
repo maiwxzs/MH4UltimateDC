@@ -161,6 +161,8 @@ Config Load() {
     c.custom_textures = flag("Display", "custom_textures", c.custom_textures);
     c.shader = str("Display", "shader", c.shader);
     c.fps_counter = str("Display", "fps_counter", c.fps_counter);
+    c.menu_scale = num("Display", "menu_scale", c.menu_scale, 50, 150);
+    c.language = str("Display", "language", c.language);
 
     c.volume = num("Audio", "volume", c.volume, 0, 100);
     c.audio_output = str("Audio", "output", c.audio_output);
@@ -196,6 +198,24 @@ Config Load() {
     c.mouse_invert_y = flag("Controls", "mouse_invert_y", c.mouse_invert_y);
     c.mouse_invert_x = flag("Controls", "mouse_invert_x", c.mouse_invert_x);
     c.mouse_deadzone = num("Controls", "mouse_deadzone", c.mouse_deadzone, 0, 60);
+    c.stick_deadzone = num("Controls", "stick_deadzone", c.stick_deadzone, 0, 50);
+    c.stick_outer = num("Controls", "stick_outer", c.stick_outer, 50, 100);
+    c.stick_curve = num("Controls", "stick_curve", c.stick_curve, 50, 300);
+    c.stick_anti_deadzone = num("Controls", "stick_anti_deadzone", c.stick_anti_deadzone, 0, 60);
+    c.camera_deadzone = num("Controls", "camera_deadzone", c.camera_deadzone, 0, 50);
+    c.camera_outer = num("Controls", "camera_outer", c.camera_outer, 50, 100);
+    c.camera_curve = num("Controls", "camera_curve", c.camera_curve, 50, 300);
+    c.camera_stick = flag("Controls", "camera_stick", c.camera_stick);
+    c.camera_speed = num("Controls", "camera_speed", c.camera_speed, 1, 100);
+    c.camera_vertical = num("Controls", "camera_vertical", c.camera_vertical, 10, 200);
+    c.camera_invert_x = flag("Controls", "camera_invert_x", c.camera_invert_x);
+    c.camera_invert_y = flag("Controls", "camera_invert_y", c.camera_invert_y);
+    for (int i = 0; i < NativeButton::NumButtons; ++i) {
+        c.pad_buttons[i] = str("Controls", (std::string("pad_") + NativeButton::mapping[i]).c_str(), "");
+    }
+    for (int i = 0; i < Config::PAD_EXTRA_COUNT; ++i) {
+        c.pad_extra[i] = str("Controls", PAD_EXTRA_NAMES[i], c.pad_extra[i]);
+    }
     c.item_prev = str("Controls", "item_prev", c.item_prev);
     c.item_next = str("Controls", "item_next", c.item_next);
     c.stylus_key = str("Controls", "stylus_key", c.stylus_key);
@@ -283,6 +303,45 @@ std::vector<std::string> SettleTouchTaps(Config& config) {
 }
 
 std::string Template(const Config& c) {
+    std::string sticks = fmt::format(R"(# a controller's sticks the way current games read them, in % of the way: a round dead zone
+# (0-50) whose edge reads as no push, the push that reads as all the way (50-100), the response
+# curve (50-300: 100 straight, more for finer small pushes) and, for the left stick, the least push
+# given once it moves (0-60: past the game's own dead zone). stick_ is the left stick (moving),
+# camera_ the right one
+stick_deadzone = {}
+stick_outer = {}
+stick_curve = {}
+stick_anti_deadzone = {}
+camera_deadzone = {}
+camera_outer = {}
+camera_curve = {}
+# the right stick turns the camera itself, smoothly and by how far it is pushed, like current
+# games (where the code library has the camera hook; off: it is the 3DS's C-stick): its speed
+# (1-100; 50 = 200 degrees a second), up and down in % of left and right (10-200), inverted
+camera_stick = {}
+camera_speed = {}
+camera_vertical = {}
+camera_invert_x = {}
+camera_invert_y = {}
+# the controller's buttons for a 3DS button by SDL's names, several separated by | (pad_button_a =
+# b | paddle1): a, b, x, y, leftshoulder, rightshoulder, lefttrigger, righttrigger, back, start,
+# leftstick, rightstick, dpup, dpdown, dpleft, dpright, misc1, paddle1 to paddle4. Empty: the
+# automatic mapping (controller = auto)
+)",
+                                     c.stick_deadzone, c.stick_outer, c.stick_curve, c.stick_anti_deadzone,
+                                     c.camera_deadzone, c.camera_outer, c.camera_curve, OnOff(c.camera_stick),
+                                     c.camera_speed, c.camera_vertical, OnOff(c.camera_invert_x),
+                                     OnOff(c.camera_invert_y));
+    for (int i = 0; i < NativeButton::NumButtons; ++i) {
+        if (!c.pad_buttons[i].empty()) {
+            sticks += fmt::format("pad_{} = {}\n", NativeButton::mapping[i], c.pad_buttons[i]);
+        }
+    }
+    sticks += "# the controller's back paddles and its misc (share) button as a further button for a 3DS button\n"
+              "# besides its own (A, B, X, Y, L, R, ZL, ZR, START, SELECT, UP, DOWN, LEFT, RIGHT) or off\n";
+    for (int i = 0; i < Config::PAD_EXTRA_COUNT; ++i) {
+        sticks += fmt::format("{} = {}\n", PAD_EXTRA_NAMES[i], c.pad_extra[i]);
+    }
     std::string keys;
     for (int i = 0; i < NativeButton::NumButtons; ++i) {
         keys += fmt::format("{} = {}\n", NativeButton::mapping[i], c.keys[i]);
@@ -353,6 +412,10 @@ shader = {}
 # the frame-rate counter over the game: off, top-left, top-right, bottom-left or bottom-right
 # (fps_counter_key, F3, shows and hides it while you play)
 fps_counter = {}
+# the size of the port's menu and overlays in % (50-150) of the size the window's height gives
+menu_scale = {}
+# the port's menu in auto (your system's language, when there is a translation), en or es
+language = {}
 
 [Audio]
 # 0-100
@@ -378,7 +441,7 @@ mouse_vertical = {}
 mouse_invert_y = {}
 mouse_invert_x = {}
 mouse_deadzone = {}
-# the item bar: these scroll it left and right (L held with Y or A, the game's own way)
+{}# the item bar: these scroll it left and right (L held with Y or A, the game's own way)
 item_prev = {}
 item_next = {}
 stylus_key = {}
@@ -452,8 +515,8 @@ catalog_url = {}
                        c.game, OnOff(c.launcher), OnOff(c.check_updates), c.new_3ds, c.cpu_clock,
                        c.fast_forward_speed, c.renderer, OnOff(c.fullscreen), c.resolution,
                        OnOff(c.vsync), c.screens, OnOff(c.linear_filter), OnOff(c.custom_textures),
-                       c.shader, c.fps_counter, c.volume, c.audio_output, c.input_mode, c.mouse_sensitivity,
-                       c.mouse_vertical, OnOff(c.mouse_invert_y), OnOff(c.mouse_invert_x), c.mouse_deadzone, c.item_prev, c.item_next,
+                       c.shader, c.fps_counter, c.menu_scale, c.language, c.volume, c.audio_output, c.input_mode, c.mouse_sensitivity,
+                       c.mouse_vertical, OnOff(c.mouse_invert_y), OnOff(c.mouse_invert_x), c.mouse_deadzone, sticks, c.item_prev, c.item_next,
                        c.stylus_key, c.key_guides, c.key_guides_key, c.controller_auto ? "auto" : "off", keys,
                        params, c.touch_screen_key, c.fullscreen_key, c.fps_counter_key, c.pause_key,
                        c.fast_forward_key, OnOff(c.fast_forward_hold), taps, c.nickname, c.join, c.password,

@@ -21,8 +21,11 @@
 #include "ui/menu.h"
 #include "ui/menu_parts.h"
 #include "ui/touch_taps.h"
+#include "ui/lang.h"
 
 namespace App::Ui {
+
+using Lang::Tr;
 
 using namespace MenuParts;
 
@@ -177,6 +180,38 @@ void SetKey(Config& config, const Binding& b, int slot, const std::string& key) 
     *spec = joined;
 }
 
+/// The controller's buttons a 3DS button can take in Keys (pad_button_*, SDL's names); "" is the
+/// automatic mapping.
+struct PadChoice {
+    const char* value;
+    const char* label;
+};
+constexpr PadChoice PAD_CHOICES[] = {
+    {"", "Auto"},
+    {"a", "A (bottom)"},
+    {"b", "B (right)"},
+    {"x", "X (left)"},
+    {"y", "Y (top)"},
+    {"leftshoulder", "LB"},
+    {"rightshoulder", "RB"},
+    {"lefttrigger", "LT"},
+    {"righttrigger", "RT"},
+    {"back", "Back / View"},
+    {"start", "Start / Menu"},
+    {"leftstick", "Left stick click"},
+    {"rightstick", "Right stick click"},
+    {"dpup", "D-pad up"},
+    {"dpdown", "D-pad down"},
+    {"dpleft", "D-pad left"},
+    {"dpright", "D-pad right"},
+    {"misc1", "Misc (share)"},
+    {"paddle1", "Paddle 1"},
+    {"paddle2", "Paddle 2"},
+    {"paddle3", "Paddle 3"},
+    {"paddle4", "Paddle 4"},
+    {"none", "None"},
+};
+
 std::string ControllerButtonName(int button) {
     switch (button) {
     case SDL_CONTROLLER_BUTTON_A:
@@ -209,6 +244,16 @@ std::string ControllerButtonName(int button) {
         return "D-pad left";
     case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
         return "D-pad right";
+    case SDL_CONTROLLER_BUTTON_MISC1:
+        return "Misc (share)";
+    case SDL_CONTROLLER_BUTTON_PADDLE1:
+        return "Paddle 1";
+    case SDL_CONTROLLER_BUTTON_PADDLE2:
+        return "Paddle 2";
+    case SDL_CONTROLLER_BUTTON_PADDLE3:
+        return "Paddle 3";
+    case SDL_CONTROLLER_BUTTON_PADDLE4:
+        return "Paddle 4";
     default:
         return fmt::format("button {}", button);
     }
@@ -236,12 +281,17 @@ std::string ControllerName(const std::string& params) {
     const Common::ParamPackage p{params};
     const std::string engine = p.Get("engine", "");
     if (engine == "mh4u_any") { // the app's keys, mouse and controller together (input.cpp)
-        for (int i = p.Get("n", 0) - 1; i >= 0; --i) {
+        // every controller button it has (its own, the player's, a paddle), in order
+        std::string names;
+        for (int i = 0; i < p.Get("n", 0); ++i) {
             if (std::string name = ControllerName(p.Get(fmt::format("d{}", i), "")); !name.empty()) {
-                return name;
+                names += (names.empty() ? "" : " / ") + name;
             }
         }
-        return "";
+        return names;
+    }
+    if (engine == "mh4u_shape") { // a controller's stick, shaped (input.cpp, stick.h)
+        return ControllerName(p.Get("inner", ""));
     }
     if (engine == "mh4u_mouse") {
         return "";
@@ -281,10 +331,10 @@ bool BeginKeyTable(const char* id) {
         return false;
     }
     // the action's 30 characters on one line at 1280x800 too
-    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 0.37f);
-    ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch, 0.2f);
-    ImGui::TableSetupColumn("Second key", ImGuiTableColumnFlags_WidthStretch, 0.2f);
-    ImGui::TableSetupColumn("Controller", ImGuiTableColumnFlags_WidthStretch, 0.23f);
+    ImGui::TableSetupColumn(Tr("Action"), ImGuiTableColumnFlags_WidthStretch, 0.37f);
+    ImGui::TableSetupColumn(Tr("Key"), ImGuiTableColumnFlags_WidthStretch, 0.2f);
+    ImGui::TableSetupColumn(Tr("Second key"), ImGuiTableColumnFlags_WidthStretch, 0.2f);
+    ImGui::TableSetupColumn(Tr("Controller"), ImGuiTableColumnFlags_WidthStretch, 0.23f);
     return true;
 }
 
@@ -369,10 +419,10 @@ void Menu::RefreshKeyTexts() {
             for (const auto& [ini, role] : {std::pair{kick, "kick"}, std::pair{target, "target camera"},
                                             std::pair{skip, "skip"}}) {
                 if (ini == button.ini) {
-                    roles += (roles.empty() ? "" : ", ") + std::string(role);
+                    roles += (roles.empty() ? "" : ", ") + std::string(Tr(role));
                 }
             }
-            std::string text = button.action;
+            std::string text = Tr(button.action);
             if (!roles.empty()) {
                 text += (text.empty() ? "" : ", ") + roles;
             }
@@ -400,6 +450,13 @@ void Menu::RefreshKeyTexts() {
     search_extra[static_cast<int>(R::TouchMapKey)] = search_extra[static_cast<int>(R::KeysTouchScreen)];
     search_extra[static_cast<int>(R::GameplayFfKey)] = search_extra[static_cast<int>(R::KeysFastForward)];
     search_extra[static_cast<int>(R::GameplayPauseKey)] = search_extra[static_cast<int>(R::KeysPause)];
+    // in another language, its words find the rows too: each row's label and help as shown
+    if (std::string(Lang::Current()) != "en") {
+        for (int i = 0; i < Index::ROW_COUNT; ++i) {
+            const Index::Row& r = Index::Get(static_cast<RowId>(i));
+            search_extra[i] += std::string(" ") + Tr(r.label) + " " + Tr(r.help);
+        }
+    }
 }
 
 // ── Keys ──
@@ -474,6 +531,29 @@ void Menu::DrawKeyRow(RowId row, int index) {
         KeyButton(index, slot, "key", -FLT_MIN, row);
     }
     ImGui::TableSetColumnIndex(3);
+    if (b.button >= 0 && b.button != NativeButton::Home) {
+        // the controller's button for it: automatic, or one the player picks (pad_button_*)
+        Config& config = layer.config;
+        std::string value = config.pad_buttons[b.button];
+        std::vector<std::string> labels;
+        labels.reserve(std::size(PAD_CHOICES));
+        for (const PadChoice& choice : PAD_CHOICES) {
+            labels.push_back(choice.value[0] ? choice.label : Tr("Auto: ") + PadText(index));
+        }
+        std::vector<std::string> values;
+        for (const PadChoice& choice : PAD_CHOICES) {
+            values.emplace_back(choice.value);
+        }
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ChooseValue(fmt::format("##pad{}", index).c_str(), value, std::move(values), std::move(labels))) {
+            config.pad_buttons[b.button] = value;
+            ControlsChanged();
+        }
+        layer.Help("The controller's button for it. Auto: the automatic mapping. Back paddles: also in Controls, "
+                   "Controller.");
+        item = {};
+        return;
+    }
     ImGui::AlignTextToFramePadding();
     const std::string& pad = PadText(index);
     ImGui::PushTextWrapPos(0.0f);
@@ -525,8 +605,8 @@ void Menu::KeyButton(int index, int slot, const char* prefix, float width, RowId
                                       : false;
     const int id = index * SLOTS + slot;
     const std::string key = KeyOf(config, b, slot);
-    const std::string label = capture == id ? std::string("Press a key...")
-                              : custom      ? std::string("(Azahar parameters)")
+    const std::string label = capture == id ? std::string(Tr("Press a key..."))
+                              : custom      ? std::string(Tr("(Azahar parameters)"))
                               : key.empty() ? std::string("-")
                                             : key;
     ImGui::BeginDisabled(custom);
@@ -559,13 +639,13 @@ void Menu::DrawResetKeys() {
     ImGui::Spacing();
     item = {};
     item.row = R::KeysReset; // the search's jump to it lands here
-    if (ImGui::Button("Reset keys to the defaults")) {
-        ImGui::OpenPopup("Reset the keys?");
+    if (ImGui::Button(Tr("Reset keys to the defaults"))) {
+        ImGui::OpenPopup(Tr("Reset the keys?"));
     }
     ItemHelp(R::KeysReset);
     item = {};
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::BeginPopupModal("Reset the keys?", nullptr,
+    if (ImGui::BeginPopupModal(Tr("Reset the keys?"), nullptr,
                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28.0f);
         ImGui::TextUnformatted("Every key goes back to how it came, after Monster Hunter Rise on PC, and the "
@@ -573,13 +653,15 @@ void Menu::DrawResetKeys() {
                                "without them); the mouse settings and Fast forward mode stay.");
         ImGui::PopTextWrapPos();
         ImGui::Spacing();
-        if (ImGui::Button("Reset")) {
+        if (ImGui::Button(Tr("Reset"))) {
             Config& config = layer.config;
             const Config defaults = App::Defaults();
             config.keys = defaults.keys;
             config.stick_keys = defaults.stick_keys;
             config.button_params = defaults.button_params;
             config.stick_params = defaults.stick_params;
+            config.pad_buttons = defaults.pad_buttons;
+            config.pad_extra = defaults.pad_extra;
             config.controller_auto = defaults.controller_auto;
             config.item_prev = defaults.item_prev;
             config.item_next = defaults.item_next;
@@ -596,7 +678,7 @@ void Menu::DrawResetKeys() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel") || CancelPressed()) {
+        if (ImGui::Button(Tr("Cancel")) || CancelPressed()) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SetItemDefaultFocus();

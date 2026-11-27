@@ -68,7 +68,9 @@ public:
         CpuClock,
         FastForward,
         CustomTextures,
-        Launcher
+        Launcher,
+        MenuScale,
+        Language
     };
 
     /// The layout editor is up in place of the menu's window: frames over the game for the

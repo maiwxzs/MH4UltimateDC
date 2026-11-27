@@ -16,9 +16,12 @@
 #include "taps.h"
 #include "ui/layer.h"
 #include "ui/nav.h"
+#include "ui/lang.h"
 #include "window.h"
 
 namespace App::Ui {
+
+using Lang::Tr;
 
 namespace {
 
@@ -66,7 +69,7 @@ bool DrawTouchTaps(Layer& layer) {
     s.selected = std::clamp(s.selected, 0, std::max(static_cast<int>(taps.size()) - 1, 0));
 
     ImGui::Spacing();
-    ImGui::SeparatorText("Touch taps");
+    ImGui::SeparatorText(Tr("Touch taps"));
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     ImGui::TextWrapped("A key held touches the touch screen at a point, and lets go with the key: an item "
                        "shortcut, the target camera or any other panel, without the mouse. Up to %d.",
@@ -164,7 +167,7 @@ bool DrawTouchTaps(Layer& layer) {
             }
 
             ImGui::TableSetColumnIndex(6);
-            if (ImGui::Button("Remove")) {
+            if (ImGui::Button(Tr("Remove"))) {
                 remove = i;
             }
             layer.Help("This tap goes; its keys do nothing until an input takes them.");
@@ -193,7 +196,7 @@ bool DrawTouchTaps(Layer& layer) {
     const bool touched = Input::LastTouch(touch_x, touch_y);
     const std::string stylus = Input::FirstKey(config.stylus_key);
     ImGui::BeginDisabled(static_cast<int>(taps.size()) >= Taps::MAX);
-    if (ImGui::Button("Add a tap")) {
+    if (ImGui::Button(Tr("Add a tap"))) {
         Taps::Tap tap;
         if (touched) {
             tap.x = touch_x;
@@ -330,7 +333,7 @@ bool DrawTouchTaps(Layer& layer) {
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     ImGui::PushTextWrapPos(0.0f);
     if (taps.empty()) {
-        ImGui::TextUnformatted("No taps yet: Add a tap, choose its key and put its point here.");
+        ImGui::TextUnformatted(Tr("No taps yet: Add a tap, choose its key and put its point here."));
     } else {
         const Taps::Tap& tap = taps[s.selected];
         ImGui::Text("Tap %d touches %d, %d.", s.selected + 1, tap.x, tap.y);

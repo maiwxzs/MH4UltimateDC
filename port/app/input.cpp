@@ -22,6 +22,7 @@
 #include "input_common/main.h"
 #include "hooks.h"
 #include "kbm.h"
+#include "stick.h"
 
 namespace App::Input {
 
@@ -32,6 +33,7 @@ namespace NativeButton = Settings::NativeButton;
 
 constexpr const char* ANY = "mh4u_any";
 constexpr const char* MOUSE = "mh4u_mouse";
+constexpr const char* SHAPE = "mh4u_shape";
 
 /// SetMuted: the in-game menu is up, and the game gets nothing.
 std::atomic<bool> muted{false};
@@ -155,6 +157,118 @@ public:
 Kbm::MouseCamera mouse;
 std::chrono::steady_clock::time_point mouse_last{};
 
+// ── A controller's sticks the way current games read them (stick.h) ──
+
+/// The shapes of the left stick (circle pad) and the right stick (C-stick), from the config at
+/// every Tick so that the menu's sliders apply at once; read by the sticks on the emulation
+/// thread (atomics, as BuildProfile may run elsewhere).
+struct AtomicShape {
+    std::atomic<int> deadzone{10}, outer{95}, curve{100}, anti_deadzone{0};
+    void Store(const Stick::Shape& s) {
+        deadzone.store(s.deadzone, std::memory_order_relaxed);
+        outer.store(s.outer, std::memory_order_relaxed);
+        curve.store(s.curve, std::memory_order_relaxed);
+        anti_deadzone.store(s.anti_deadzone, std::memory_order_relaxed);
+    }
+    Stick::Shape Load() const {
+        return {deadzone.load(std::memory_order_relaxed), outer.load(std::memory_order_relaxed),
+                curve.load(std::memory_order_relaxed), anti_deadzone.load(std::memory_order_relaxed)};
+    }
+};
+AtomicShape shapes[NativeAnalog::NumAnalogs];
+
+/// camera_stick: the right stick turns the camera through the port's camera hook. The stick's
+/// shaped push, kept by the C-stick while it reads centred to the game, for Tick to turn by.
+std::atomic<bool> camera_stick{true};
+std::atomic<float> pad_camera_x{0.0f}, pad_camera_y{0.0f};
+
+/// A controller's stick shaped: "engine:mh4u_shape,stick:<NativeAnalog>,inner:<params>". The
+/// C-stick's reads centred while the right stick turns the camera itself (camera_stick).
+class ShapedStick final : public ::Input::AnalogDevice {
+public:
+    ShapedStick(std::unique_ptr<::Input::AnalogDevice> inner_, int stick_)
+        : inner(std::move(inner_)), stick(stick_) {}
+    std::tuple<float, float> GetStatus() const override {
+        if (!inner) {
+            return {};
+        }
+        const auto [raw_x, raw_y] = inner->GetStatus();
+        const auto [x, y] = Stick::Apply(raw_x, raw_y, shapes[stick].Load());
+        if (stick == NativeAnalog::CStick) {
+            if (camera_stick.load(std::memory_order_relaxed) && Port::Hooks::CameraTurnActive()) {
+                pad_camera_x.store(x, std::memory_order_relaxed);
+                pad_camera_y.store(y, std::memory_order_relaxed);
+                return {};
+            }
+            pad_camera_x.store(0.0f, std::memory_order_relaxed);
+            pad_camera_y.store(0.0f, std::memory_order_relaxed);
+        }
+        return {x, y};
+    }
+
+private:
+    std::unique_ptr<::Input::AnalogDevice> inner;
+    int stick;
+};
+
+class ShapedStickFactory final : public ::Input::Factory<::Input::AnalogDevice> {
+public:
+    std::unique_ptr<::Input::AnalogDevice> Create(const Common::ParamPackage& params) override {
+        const int stick = std::clamp(params.Get("stick", 0), 0, NativeAnalog::NumAnalogs - 1);
+        return std::make_unique<ShapedStick>(::Input::CreateDevice<::Input::AnalogDevice>(params.Get("inner", "")),
+                                             stick);
+    }
+};
+
+/// The controller's stick binding shaped: Azahar's own round dead zone off (stick.h has one that
+/// scales), wrapped in mh4u_shape.
+std::string ShapedParam(Common::ParamPackage bind, int stick) {
+    bind.Set("deadzone", 0.0f);
+    Common::ParamPackage p{{"engine", SHAPE}};
+    p.Set("stick", stick);
+    p.Set("inner", bind.Serialize());
+    return p.Serialize();
+}
+
+/// A controller's button by SDL's name ("a", "rightshoulder", "paddle1", "lefttrigger") as a
+/// binding of the controller `pad`; empty for a name SDL doesn't know.
+std::string PadButtonParam(const Common::ParamPackage& pad, const std::string& name) {
+    Common::ParamPackage p = pad;
+    const std::string lower = Common::ToLower(Common::StripSpaces(name));
+    if (lower.empty() || lower == "none") {
+        return "";  // none: no controller button for it
+    }
+    if (const auto button = SDL_GameControllerGetButtonFromString(lower.c_str());
+        button != SDL_CONTROLLER_BUTTON_INVALID) {
+        p.Set("button", static_cast<int>(button));
+        return p.Serialize();
+    }
+    if (const auto axis = SDL_GameControllerGetAxisFromString(lower.c_str()); axis != SDL_CONTROLLER_AXIS_INVALID) {
+        // a trigger (or a stick's half) pressed past half way
+        p.Set("axis", static_cast<int>(axis));
+        p.Set("threshold", 0.5f);
+        p.Set("direction", "+");
+        return p.Serialize();
+    }
+    LOG_WARNING(Frontend, "no controller button called \"{}\"", name);
+    return "";
+}
+
+/// The SDL names of the extra buttons, in Config::pad_extra's order.
+constexpr const char* PAD_EXTRA_BUTTONS[Config::PAD_EXTRA_COUNT] = {"paddle1", "paddle2", "paddle3", "paddle4",
+                                                                    "misc1"};
+
+/// The 3DS button a short name means ("A", "zl", "START"), or -1 (off, or no such button).
+int NativeButtonByName(const std::string& name) {
+    const std::string key = "button_" + Common::ToLower(Common::StripSpaces(name));
+    for (int i = 0; i < NativeButton::NumButtons; ++i) {
+        if (key == NativeButton::mapping[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 // ── Timed presses: the item bar's L+Y / L+A and the wheel's keys ──
 
 Kbm::ItemScroll item_scroll(MACRO_KEY + NativeButton::L, MACRO_KEY + NativeButton::Y,
@@ -268,6 +382,7 @@ void Register() {
     ::Input::RegisterFactory<::Input::AnalogDevice>(
         ANY, std::make_shared<AnyFactory<::Input::AnalogDevice, AnyAnalog>>());
     ::Input::RegisterFactory<::Input::AnalogDevice>(MOUSE, std::make_shared<MouseStickFactory>());
+    ::Input::RegisterFactory<::Input::AnalogDevice>(SHAPE, std::make_shared<ShapedStickFactory>());
 }
 
 int KeyCode(const std::string& name) {
@@ -351,18 +466,28 @@ void BuildProfile(const Config& config) {
             profile.buttons[i] = Join({config.button_params[i]});
             continue;
         }
-        std::string from_pad;
+        std::vector<std::string> from_pad;
         // the Guide button opens the app's menu (ui/): it isn't the 3DS's HOME button here
         if (have_pad && i != NativeButton::Home) {
-            const auto bind = InputCommon::GetControllerButtonBinds(pad_base, i);
-            if (bind.Has("engine")) {
-                from_pad = bind.Serialize();
+            if (!config.pad_buttons[i].empty()) {
+                // the player's own controller buttons for it (pad_button_a = b | paddle1)
+                for (const std::string& name : KeyNames(config.pad_buttons[i])) {
+                    from_pad.push_back(PadButtonParam(pad_base, name));
+                }
+            } else if (const auto bind = InputCommon::GetControllerButtonBinds(pad_base, i); bind.Has("engine")) {
+                from_pad.push_back(bind.Serialize());
+            }
+            // and the extra buttons (back paddles, misc) given to it
+            for (int e = 0; e < Config::PAD_EXTRA_COUNT; ++e) {
+                if (NativeButtonByName(config.pad_extra[e]) == i) {
+                    from_pad.push_back(PadButtonParam(pad_base, PAD_EXTRA_BUTTONS[e]));
+                }
             }
         }
         std::vector<std::string> parts = KeyParams(config.keys[i]);
         // the item bar's macro presses L and Y or A through codes of its own
         parts.push_back(InputCommon::GenerateKeyboardParam(MACRO_KEY + i));
-        parts.push_back(from_pad);
+        parts.insert(parts.end(), from_pad.begin(), from_pad.end());
         profile.buttons[i] = Join(parts);
     }
     for (int i = 0; i < NativeAnalog::NumAnalogs; ++i) {
@@ -374,7 +499,7 @@ void BuildProfile(const Config& config) {
         if (have_pad) {
             const auto bind = InputCommon::GetControllerAnalogBinds(pad_base, i);
             if (bind.Has("engine")) {
-                from_pad = bind.Serialize();
+                from_pad = ShapedParam(bind, i);  // the stick shaped (stick.h)
             }
         }
         std::vector<std::string> parts{StickKeysParam(config.stick_keys[i]), from_pad};
@@ -484,6 +609,20 @@ void Tick(const Config& config) {
     const auto [x, y] = mouse.Tick(dt, settings);
     mouse_stick_x.store(x, std::memory_order_relaxed);
     mouse_stick_y.store(y, std::memory_order_relaxed);
+    // the controller's sticks: their shapes, and the right stick turning the camera itself
+    shapes[NativeAnalog::CirclePad].Store(
+        {config.stick_deadzone, config.stick_outer, config.stick_curve, config.stick_anti_deadzone});
+    shapes[NativeAnalog::CStick].Store({config.camera_deadzone, config.camera_outer, config.camera_curve, 0});
+    camera_stick.store(config.camera_stick, std::memory_order_relaxed);
+    if (config.camera_stick && !muted.load(std::memory_order_relaxed) && Port::Hooks::CameraTurnActive()) {
+        const Stick::Camera camera{config.camera_speed, config.camera_vertical, config.camera_invert_x,
+                                   config.camera_invert_y};
+        const auto [yaw, pitch] = Stick::Turn(pad_camera_x.load(std::memory_order_relaxed),
+                                              pad_camera_y.load(std::memory_order_relaxed), dt, camera);
+        if (yaw != 0.0f || pitch != 0.0f) {
+            Port::Hooks::AddCameraTurn(yaw, pitch);
+        }
+    }
     Apply(pulses.Tick());
     Apply(item_scroll.Tick());
     // where the stylus touches, in the touch screen's pixels as the console counts them

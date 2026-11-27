@@ -19,8 +19,11 @@
 #include "multiplayer.h"
 #include "ui/layer.h"
 #include "ui/nav.h"
+#include "ui/lang.h"
 
 namespace App::Ui {
+
+using Lang::Tr;
 
 namespace {
 
@@ -179,7 +182,7 @@ void DrawStatus(const MP::Status& st) {
         ImGui::SameLine();
         ImGui::TextDisabled("%zu of %u: %s", st.members.size(), st.slots, names.c_str());
     } else {
-        ImGui::TextUnformatted("Not in a room: the game's local play reaches only this PC.");
+        ImGui::TextUnformatted(Tr("Not in a room: the game's local play reaches only this PC."));
     }
     if (!st.error.empty()) {
         ImGui::PushTextWrapPos(0.0f);
@@ -219,7 +222,7 @@ void DrawInvite(Layer& layer, TabState& tab, const MP::Status& st) {
         }
         tab.address = std::clamp(tab.address, 0, static_cast<int>(hosts.size()) - 1);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Friends reach you at");
+        ImGui::TextUnformatted(Tr("Friends reach you at"));
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (ImGui::BeginCombo("##invite_address", labels[tab.address].c_str())) {
@@ -236,7 +239,7 @@ void DrawInvite(Layer& layer, TabState& tab, const MP::Status& st) {
     }
     std::string code = Invite::Format(host, st.port, st.password);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Invite");
+    ImGui::TextUnformatted(Tr("Invite"));
     ImGui::SameLine();
     const float button = ImGui::CalcTextSize("Copied!").x + ImGui::GetStyle().FramePadding.x * 2 + 4;
     ImGui::SetNextItemWidth(std::max(80.0f, ImGui::GetContentRegionAvail().x - button - ImGui::GetStyle().ItemSpacing.x));
@@ -273,7 +276,7 @@ void DrawHostNotes(const MP::Status& st) {
 void DrawRoom(Layer& layer, TabState& tab, const MP::Status& st) {
     if (st.joined_in_game) {
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextColored(GOOD, "Next, in the game:");
+        ImGui::TextColored(GOOD, "%s", Tr("Next, in the game:"));
         ImGui::SameLine();
         ImGui::TextUnformatted("go to the Gathering Hall and choose Local Play. One player creates a hall; "
                                "the others find it in the list and join it. If you were already in a hall "
@@ -282,9 +285,9 @@ void DrawRoom(Layer& layer, TabState& tab, const MP::Status& st) {
         ImGui::Spacing();
     }
     if (ImGui::BeginTable("##members", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
-        ImGui::TableSetupColumn("Player", ImGuiTableColumnFlags_WidthStretch, 0.36f);
-        ImGui::TableSetupColumn("Local play heard", ImGuiTableColumnFlags_WidthStretch, 0.26f);
-        ImGui::TableSetupColumn("Playing", ImGuiTableColumnFlags_WidthStretch, 0.38f);
+        ImGui::TableSetupColumn(Tr("Player"), ImGuiTableColumnFlags_WidthStretch, 0.36f);
+        ImGui::TableSetupColumn(Tr("Local play heard"), ImGuiTableColumnFlags_WidthStretch, 0.26f);
+        ImGui::TableSetupColumn(Tr("Playing"), ImGuiTableColumnFlags_WidthStretch, 0.38f);
         ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
         ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
         for (int column = 0; column < 3; ++column) {
@@ -317,29 +320,30 @@ void DrawRoom(Layer& layer, TabState& tab, const MP::Status& st) {
     ImGui::Spacing();
     DrawInvite(layer, tab, st);
     ImGui::Spacing();
-    if (ImGui::Button("Leave the room")) {
-        ImGui::OpenPopup("Leave the room?");
+    if (ImGui::Button(Tr("Leave the room"))) {
+        ImGui::OpenPopup(Tr("Leave the room?"));
     }
     layer.Help("Your game loses the others (do it outside a hall or quest). The next start is solo; Rejoin "
                "last room brings you back.");
     if (st.hosting) {
         ImGui::SameLine();
-        if (ImGui::Button("Close the room")) {
-            ImGui::OpenPopup("Close the room?");
+        if (ImGui::Button(Tr("Close the room"))) {
+            ImGui::OpenPopup(Tr("Close the room?"));
         }
         layer.Help("Everyone in it leaves.");
     }
     const auto confirm = [&layer](const char* title, const char* text, const char* yes, bool close) {
         ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
-            ImGui::TextUnformatted(text);
+        // (the titles as OpenPopup gave them: translated)
+        if (ImGui::BeginPopupModal(Tr(title), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+            ImGui::TextUnformatted(Tr(text));
             ImGui::Spacing();
-            if (ImGui::Button(yes)) {
+            if (ImGui::Button(Tr(yes))) {
                 layer.Post([close] { MP::Leave(close); });
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel") || CancelPressed()) {
+            if (ImGui::Button(Tr("Cancel")) || CancelPressed()) {
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SetItemDefaultFocus();
@@ -402,13 +406,13 @@ void DrawLobby(Layer& layer, TabState& tab, const Config& config) {
         return;
     }
     if (tab.rooms.rooms.empty()) {
-        ImGui::TextDisabled("No rooms are open there right now. Host one (Host a room).");
+        ImGui::TextDisabled("%s", Tr("No rooms are open there right now. Host one (Host a room)."));
         return;
     }
     if (ImGui::BeginTable("##lobby", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
-        ImGui::TableSetupColumn("Room", ImGuiTableColumnFlags_WidthStretch, 0.46f);
-        ImGui::TableSetupColumn("Owner", ImGuiTableColumnFlags_WidthStretch, 0.24f);
-        ImGui::TableSetupColumn("Players", ImGuiTableColumnFlags_WidthStretch, 0.14f);
+        ImGui::TableSetupColumn(Tr("Room"), ImGuiTableColumnFlags_WidthStretch, 0.46f);
+        ImGui::TableSetupColumn(Tr("Owner"), ImGuiTableColumnFlags_WidthStretch, 0.24f);
+        ImGui::TableSetupColumn(Tr("Players"), ImGuiTableColumnFlags_WidthStretch, 0.14f);
         ImGui::TableSetupColumn("##join", ImGuiTableColumnFlags_WidthStretch, 0.16f);
         int i = 0;
         for (const auto& room : tab.rooms.rooms) {
@@ -446,11 +450,11 @@ void DrawLobby(Layer& layer, TabState& tab, const Config& config) {
 
 void DrawPasswordPopup(Layer& layer, TabState& tab) {
     if (tab.ask_password) {
-        ImGui::OpenPopup("The room's password");
+        ImGui::OpenPopup(Tr("The room's password"));
         tab.ask_password = false;
     }
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::BeginPopupModal("The room's password", nullptr,
+    if (ImGui::BeginPopupModal(Tr("The room's password"), nullptr,
                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::Text("\"%s\" has a password.", tab.ask_label.c_str());
         if (ImGui::IsWindowAppearing()) {
@@ -459,12 +463,12 @@ void DrawPasswordPopup(Layer& layer, TabState& tab) {
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 16);
         const bool enter = InputText("##ask_password", tab.ask_password_text, "password",
                                      ImGuiInputTextFlags_Password | ImGuiInputTextFlags_EnterReturnsTrue);
-        if (ImGui::Button("Join") || enter) {
+        if (ImGui::Button(Tr("Join")) || enter) {
             Join(layer, tab.ask_host, tab.ask_port, tab.ask_password_text, tab.ask_label);
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel") || (CancelPressed() && !ImGui::IsItemActive())) {
+        if (ImGui::Button(Tr("Cancel")) || (CancelPressed() && !ImGui::IsItemActive())) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -492,7 +496,7 @@ void DrawLan(Layer& layer, TabState& tab) {
         StartLanSearch(tab);
     }
     ImGui::AlignTextToFramePadding();
-    ImGui::TextDisabled("Rooms hosted on your network (the same Wi-Fi or router)");
+    ImGui::TextDisabled("%s", Tr("Rooms hosted on your network (the same Wi-Fi or router)"));
     ImGui::SameLine();
     ImGui::BeginDisabled(tab.lan_searching);
     if (ImGui::SmallButton(tab.lan_searching ? "Searching..." : "Search again")) {
@@ -517,9 +521,9 @@ void DrawLan(Layer& layer, TabState& tab) {
         return;
     }
     if (ImGui::BeginTable("##lan", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
-        ImGui::TableSetupColumn("Room", ImGuiTableColumnFlags_WidthStretch, 0.40f);
-        ImGui::TableSetupColumn("Host", ImGuiTableColumnFlags_WidthStretch, 0.30f);
-        ImGui::TableSetupColumn("Players", ImGuiTableColumnFlags_WidthStretch, 0.14f);
+        ImGui::TableSetupColumn(Tr("Room"), ImGuiTableColumnFlags_WidthStretch, 0.40f);
+        ImGui::TableSetupColumn(Tr("Host"), ImGuiTableColumnFlags_WidthStretch, 0.30f);
+        ImGui::TableSetupColumn(Tr("Players"), ImGuiTableColumnFlags_WidthStretch, 0.14f);
         ImGui::TableSetupColumn("##join", ImGuiTableColumnFlags_WidthStretch, 0.16f);
         int i = 0;
         for (const auto& room : tab.lan_rooms.rooms) {
@@ -557,7 +561,7 @@ void DrawJoin(Layer& layer, TabState& tab, const Config& config, bool busy) {
     const std::string last = MP::LastRoom();
     if (!last.empty()) {
         ImGui::BeginDisabled(busy);
-        if (ImGui::Button("Rejoin last room")) {
+        if (ImGui::Button(Tr("Rejoin last room"))) {
             layer.Post([] { MP::Rejoin(); });
         }
         ImGui::EndDisabled();
@@ -573,7 +577,7 @@ void DrawJoin(Layer& layer, TabState& tab, const Config& config, bool busy) {
         InputText("##invite", tab.invite, "mh4u://... or HOST:PORT");
         layer.Help("Paste the invite a host gave you, or type their address (port 24872 if left out).");
         ImGui::SameLine();
-        if (ImGui::Button("Paste invite")) {
+        if (ImGui::Button(Tr("Paste invite"))) {
             tab.paste_note.clear();
             if (char* text = SDL_GetClipboardText()) {
                 const auto room = Invite::Parse(text);
@@ -610,7 +614,7 @@ void DrawJoin(Layer& layer, TabState& tab, const Config& config, bool busy) {
         ImGui::TextColored(WARN, "%s", tab.paste_note.c_str());
     }
     if (!tab.nickname.empty() && !MP::ValidNickname(tab.nickname)) {
-        ImGui::TextColored(WARN, "Rooms take names of 4 to 20 letters, digits, spaces, '.', '_' or '-'.");
+        ImGui::TextColored(WARN, "%s", Tr("Rooms take names of 4 to 20 letters, digits, spaces, '.', '_' or '-'."));
     }
     const auto room = Invite::Parse(tab.invite);
     if (!tab.invite.empty() && !room.ok) {
@@ -623,10 +627,10 @@ void DrawJoin(Layer& layer, TabState& tab, const Config& config, bool busy) {
     ImGui::EndDisabled();
     layer.Help("Joins while the game runs; the next start joins it again.");
     ImGui::Spacing();
-    ImGui::SeparatorText("On this network");
+    ImGui::SeparatorText(Tr("On this network"));
     DrawLan(layer, tab);
     ImGui::Spacing();
-    ImGui::SeparatorText("Lobby");
+    ImGui::SeparatorText(Tr("Lobby"));
     DrawLobby(layer, tab, config);
     DrawPasswordPopup(layer, tab);
 }
@@ -671,7 +675,7 @@ void DrawHost(Layer& layer, TabState& tab, const Config& config, bool busy) {
         ImGui::EndTable();
     }
     ImGui::BeginDisabled(busy);
-    if (ImGui::Button("Host this room")) {
+    if (ImGui::Button(Tr("Host this room"))) {
         MP::HostRequest request;
         request.port = tab.port;
         request.name = tab.name.empty() ? "MH4U" : tab.name;
@@ -714,12 +718,12 @@ void DrawMultiplayerTab(Layer& layer, const std::function<void()>& settings_rows
     if (st.phase == MP::Phase::InRoom) {
         DrawRoom(layer, tab, st);
         ImGui::Spacing();
-        ImGui::SeparatorText("Another room");
+        ImGui::SeparatorText(Tr("Another room"));
     } else if (st.hosting && !busy) {
         // left the room this PC hosts: it still relays the others
         ImGui::TextDisabled("This PC still runs the room on port %d for the others.", st.port);
         ImGui::SameLine();
-        if (ImGui::SmallButton("Close it")) {
+        if (ImGui::SmallButton(Tr("Close it"))) {
             layer.Post([] { MP::Leave(true); });
         }
         ImGui::Spacing();

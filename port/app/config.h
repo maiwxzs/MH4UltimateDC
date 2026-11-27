@@ -12,6 +12,10 @@
 
 namespace App {
 
+/// The ini keys of the controller's extra buttons (Config::pad_extra), in its order: the back
+/// paddles and the misc (share, capture) button.
+inline constexpr const char* PAD_EXTRA_NAMES[] = {"paddle_1", "paddle_2", "paddle_3", "paddle_4", "misc_button"};
+
 struct Config {
     // [Game]
     std::string game;  ///< the decrypted game (.3ds, .cci, .cxi); empty: ask
@@ -41,6 +45,11 @@ struct Config {
     std::string shader;               ///< a post-processing shader, empty: none
     /// The frame-rate counter over the game: off, top-left, top-right, bottom-left, bottom-right
     std::string fps_counter = "off";
+    /// The size of the port's menu, launcher hints and overlays in % of the size the window's
+    /// height gives (50-150)
+    int menu_scale = 100;
+    /// The language of the port's menu: auto (the system's, when there is a translation), en, es
+    std::string language = "auto";
 
     // [Audio]
     int volume = 100;                 ///< 0-100
@@ -78,6 +87,33 @@ struct Config {
     bool mouse_invert_y = false;
     bool mouse_invert_x = false;
     int mouse_deadzone = 12;      ///< 0-60: the least push on the C-stick a moving mouse gives, %
+    /// A controller's sticks the way current games read them (stick.h): the left stick (the
+    /// circle pad: moving) and the right stick (the C-stick: the camera), each a round dead zone,
+    /// an outer one, a response curve (100 straight) and an anti-dead zone, in %
+    int stick_deadzone = 10;
+    int stick_outer = 95;
+    int stick_curve = 100;
+    int stick_anti_deadzone = 0;
+    int camera_deadzone = 10;
+    int camera_outer = 95;
+    int camera_curve = 150;
+    /// The right stick turns the game's camera itself where the port's camera hook runs (like the
+    /// mouse): smooth, by how far it is pushed, at camera_speed (1-100; 50: 200 degrees a second),
+    /// up and down at camera_vertical % (10-200). Off: it is the 3DS's C-stick, as it was
+    bool camera_stick = true;
+    int camera_speed = 50;
+    int camera_vertical = 60;
+    bool camera_invert_x = false;
+    bool camera_invert_y = false;
+    /// The controller's buttons for a 3DS button by SDL's names (a, b, x, y, leftshoulder,
+    /// rightshoulder, lefttrigger, righttrigger, back, start, leftstick, rightstick, dpup, dpdown,
+    /// dpleft, dpright, misc1, paddle1-4), several separated by |; empty: the automatic mapping
+    std::array<std::string, Settings::NativeButton::NumButtons> pad_buttons;
+    /// The controller's extra buttons (back paddles 1-4 and the misc/share button) as a further
+    /// button for a 3DS button (A, B, X, Y, L, R, ZL, ZR, START, SELECT, UP, DOWN, LEFT, RIGHT)
+    /// besides its own, or off. Only the paddles that Windows and SDL see work (paddle_note)
+    static constexpr int PAD_EXTRA_COUNT = 5;
+    std::array<std::string, PAD_EXTRA_COUNT> pad_extra = {"off", "off", "off", "off", "off"};
     std::string item_prev = "Wheel Up";    ///< scrolls the item bar left (L+Y)
     std::string item_next = "Wheel Down";  ///< and right (L+A)
     std::string stylus_key = "Left Alt";   ///< held: the mouse is the stylus again

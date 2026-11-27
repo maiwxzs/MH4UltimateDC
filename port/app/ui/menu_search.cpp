@@ -13,8 +13,11 @@
 #include "ui/menu.h"
 #include "ui/menu_parts.h"
 #include "ui/nav.h"
+#include "ui/lang.h"
 
 namespace App::Ui {
+
+using Lang::Tr;
 
 using namespace MenuParts;
 
@@ -103,7 +106,7 @@ void Menu::DrawResults(float footer) {
         DrawSearchKeys();
     }
     if (!searchable) {
-        ImGui::TextDisabled("Type a setting's name or a word like fps, map, kick or bloom.");
+        ImGui::TextDisabled("%s", Tr("Type a setting's name or a word like fps, map, kick or bloom."));
     } else {
         BackendLine();
         const ImGuiStyle& style = ImGui::GetStyle();
@@ -237,24 +240,24 @@ void Menu::DrawSearchKeys() {
             }
         }
     }
-    if (ImGui::Button("Space##keys", ImVec2(wide, 0.0f))) {
+    if (ImGui::Button(Tr("Space##keys"), ImVec2(wide, 0.0f))) {
         TypeKey(' ');
     }
     layer.Help("Types a space (RB too).");
     ImGui::SameLine();
-    if (ImGui::Button("Delete##keys", ImVec2(wide, 0.0f))) {
+    if (ImGui::Button(Tr("Delete##keys"), ImVec2(wide, 0.0f))) {
         if (const std::size_t length = std::char_traits<char>::length(search)) {
             search[length - 1] = '\0';
         }
     }
     layer.Help("Deletes the last letter (LB too).");
     ImGui::SameLine();
-    if (ImGui::Button("Clear##keys", ImVec2(wide, 0.0f))) {
+    if (ImGui::Button(Tr("Clear##keys"), ImVec2(wide, 0.0f))) {
         search[0] = '\0';
     }
     layer.Help("Deletes the whole text.");
     ImGui::SameLine();
-    if (ImGui::Button("Done##keys", ImVec2(wide, 0.0f))) {
+    if (ImGui::Button(Tr("Done##keys"), ImVec2(wide, 0.0f))) {
         FinishKeys();
     }
     layer.Help("Goes to the results (Y or Start too); B closes the keys and keeps the text.");

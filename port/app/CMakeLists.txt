@@ -42,6 +42,9 @@ add_executable(mh4u
     # the keyboard-and-mouse mode's arithmetic (the mouse as the camera, the item bar's scroll)
     kbm.cpp
     kbm.h
+    # a controller's sticks the way current games read them (dead zones, curve, the camera)
+    stick.cpp
+    stick.h
     # touch taps: keys that touch the touch screen at a point, and their one-key-one-input rule
     taps.cpp
     taps.h
@@ -57,6 +60,9 @@ add_executable(mh4u
     ui/keyboard.cpp
     ui/keyboard.h
     ui/layer.h
+    ui/lang.cpp
+    ui/lang.h
+    ui/lang_es.inc
     ui/menu.cpp
     ui/menu.h
     ui/menu_editor.cpp

@@ -237,6 +237,11 @@ APP_SETTINGS = {
     "[Controls] fast_forward_hold", "[Controls] item_prev", "[Controls] item_next", "[Controls] stylus_key",
     "[Controls] touch_screen_key", "[Controls] key_guides_key", "[Controls] pause_key", "[Controls] fast_forward_key",
     "[Controls] circle_pad", "[Controls] c_stick", "[Controls] touch_tap_N",
+    "[Display] menu_scale", "[Display] language", "[Controls] camera_stick", "[Controls] camera_speed", "[Controls] camera_vertical",
+    "[Controls] camera_invert_x", "[Controls] camera_invert_y", "[Controls] stick_deadzone", "[Controls] stick_outer",
+    "[Controls] stick_curve", "[Controls] stick_anti_deadzone", "[Controls] camera_deadzone",
+    "[Controls] camera_outer", "[Controls] camera_curve", "[Controls] paddle_1", "[Controls] paddle_2",
+    "[Controls] paddle_3", "[Controls] paddle_4", "[Controls] misc_button",
     *(f"[Controls] button_{b}" for b in ("a", "b", "x", "y", "l", "r", "zl", "zr", "start", "select", "up", "down",
                                          "left", "right")),
 }

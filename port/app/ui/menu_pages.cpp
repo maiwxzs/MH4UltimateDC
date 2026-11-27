@@ -26,11 +26,14 @@
 #include "ui/multiplayer_tab.h"
 #include "ui/nav.h"
 #include "ui/touch_taps.h"
+#include "ui/lang.h"
 #include "video_core/gpu.h"
 #include "video_core/renderer_base.h"
 #include "window.h"
 
 namespace App::Ui {
+
+using Lang::Tr;
 
 using namespace MenuParts;
 
@@ -200,6 +203,27 @@ void Menu::DrawDisplay() {
                 Changed(AppSetting::Launcher);
             }
             EndRow(R::DisplayLauncher);
+        }
+        if (BeginRow(R::DisplayMenuScale)) {
+            // steps, not a slider: the menu changes size under the cursor
+            std::string scale = std::to_string(std::clamp(config.menu_scale, 50, 150));
+            if (ChooseValue("##menu_scale", scale, {"60", "70", "80", "90", "100", "110", "125", "150"},
+                            {"60%", "70%", "80%", "90%", "100% (as it comes)", "110%", "125%", "150%"})) {
+                config.menu_scale = std::atoi(scale.c_str());
+                Changed(AppSetting::MenuScale);
+            }
+            EndRow(R::DisplayMenuScale);
+        }
+        if (BeginRow(R::DisplayLanguage)) {
+            std::string language = Lower(config.language);
+            if (ChooseValue("##language", language, {"auto", "en", "es"},
+                            {"Auto (the system's)", "English", "Espa\u00f1ol"})) {
+                config.language = language;
+                Lang::Set(language);
+                texts_dirty = true; // the keys' labels, in the new language
+                Changed(AppSetting::Language);
+            }
+            EndRow(R::DisplayLanguage);
         }
         EndSettings();
     }
@@ -413,7 +437,7 @@ void Menu::DrawTouchScreen() {
         }
         if (BeginRow(R::TouchHudEditor)) {
             // with the overlay running (R1, R2, R3 say why not)
-            if (ImGui::Button("Edit HUD layout", ImVec2(-FLT_MIN, 0.0f))) {
+            if (ImGui::Button(Tr("Edit HUD layout"), ImVec2(-FLT_MIN, 0.0f))) {
                 StartLayoutEdit();
             }
             EndRow(R::TouchHudEditor);
@@ -582,6 +606,66 @@ void Menu::DrawControls() {
                 "Opens Gameplay: the kick and the target camera on buttons, the end of quests, fast forward and "
                 "touch taps.",
                 "controls_gameplay");
+        EndSettings();
+    }
+
+    // the sticks the way current games read them (stick.h), live: input.cpp reads them every frame
+    Section(S::ControlsSticks);
+    if (BeginSettings("##sticks")) {
+        const auto slider = [&](RowId row, const char* id, int& value, int min, int max, const char* format,
+                                int step) {
+            if (BeginRow(row)) {
+                if (SliderInt(id, value, min, max, format, step)) {
+                    Changed(AppSetting::Controls);
+                }
+                EndRow(row);
+            }
+        };
+        const auto check = [&](RowId row, const char* id, bool& value) {
+            if (BeginRow(row)) {
+                if (ImGui::Checkbox(id, &value)) {
+                    Changed(AppSetting::Controls);
+                }
+                EndRow(row);
+            }
+        };
+        check(R::ControlsCameraStick, "##camera_stick", config.camera_stick);
+        slider(R::ControlsCameraSpeed, "##camera_speed", config.camera_speed, 1, 100, "%d", 1);
+        slider(R::ControlsCameraVertical, "##camera_vertical", config.camera_vertical, 10, 200,
+               "%d%% of left and right", 5);
+        check(R::ControlsCameraInvertX, "##camera_invert_x", config.camera_invert_x);
+        check(R::ControlsCameraInvertY, "##camera_invert_y", config.camera_invert_y);
+        slider(R::ControlsStickDeadzone, "##stick_deadzone", config.stick_deadzone, 0, 50, "%d%%", 1);
+        slider(R::ControlsStickOuter, "##stick_outer", config.stick_outer, 50, 100, "%d%%", 1);
+        slider(R::ControlsStickCurve, "##stick_curve", config.stick_curve, 50, 300, "%d", 10);
+        slider(R::ControlsStickAntiDeadzone, "##stick_anti_deadzone", config.stick_anti_deadzone, 0, 60, "%d%%", 1);
+        slider(R::ControlsCameraDeadzone, "##camera_deadzone", config.camera_deadzone, 0, 50, "%d%%", 1);
+        slider(R::ControlsCameraOuter, "##camera_outer", config.camera_outer, 50, 100, "%d%%", 1);
+        slider(R::ControlsCameraCurve, "##camera_curve", config.camera_curve, 50, 300, "%d", 10);
+        EndSettings();
+    }
+
+    // the back paddles and the share button: a further button for a 3DS button (input.cpp)
+    Section(S::ControlsPaddles);
+    if (BeginSettings("##paddles")) {
+        static constexpr RowId rows[Config::PAD_EXTRA_COUNT] = {R::ControlsPaddle1, R::ControlsPaddle2,
+                                                                 R::ControlsPaddle3, R::ControlsPaddle4,
+                                                                 R::ControlsMiscButton};
+        for (int e = 0; e < Config::PAD_EXTRA_COUNT; ++e) {
+            if (!BeginRow(rows[e])) {
+                continue;
+            }
+            std::string value = Lower(config.pad_extra[e]);
+            if (ChooseValue(fmt::format("##{}", PAD_EXTRA_NAMES[e]).c_str(), value,
+                            {"off", "a", "b", "x", "y", "l", "r", "zl", "zr", "start", "select", "up", "down",
+                             "left", "right"},
+                            {"Off", "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "START", "SELECT", "D-pad up",
+                             "D-pad down", "D-pad left", "D-pad right"})) {
+                config.pad_extra[e] = value;
+                ControlsChanged();
+            }
+            EndRow(rows[e]);
+        }
         EndSettings();
     }
 }
