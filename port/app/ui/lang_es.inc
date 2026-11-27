@@ -450,3 +450,5 @@
 {"60%", "60 %"},
 {"A 3DS button besides its own, or a port action: map, pause, fast forward. Only paddles Windows shows games work.", "Un botón de la 3DS además del suyo, o una acción del port: mapa, pausa, avance rápido. Solo sirven las paletas que Windows deja ver."},
 {"The share (capture, misc) button as a further 3DS button, or a port action: map, pause, fast forward.", "El botón compartir (captura, misc) como botón extra de la 3DS, o una acción del port: mapa, pausa, avance rápido."},
+{"Show the whole text", "Mostrar todo el texto"},
+{"While a text is typed out letter by letter, this button shows the rest of the page at once, as in RPGs.", "Mientras un texto se escribe letra por letra, este botón muestra el resto de la página de golpe, como en los RPG."},

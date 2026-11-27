@@ -417,6 +417,10 @@ const Row ROWS[] = {
      "second, then off).",
      "target camera lock on monster icon panel button buttons for touch panels game", "", "", false, false,
      "mh4u.ini target"},
+    {"gameplay.text_skip", "gameplay.buttons", S, "Show the whole text", nullptr,
+     "While a text is typed out letter by letter, this button shows the rest of the page at once, as in RPGs.",
+     "text skip dialog dialogue message letters typing instant rpg fast talk npc texto", "", "", false, false,
+     "mh4u.ini text_skip"},
     {"gameplay.skip", "gameplay.after_quest", S, "Skip the scene", nullptr,
      "Once a quest is complete, taps the touch screen's Skip, which skips the scene of the monster's end. It can "
      "share the kick's button.",

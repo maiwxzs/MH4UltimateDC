@@ -118,6 +118,8 @@ struct Options {
     u32 skip_end_buttons = 0x400 | 0x800;  // skip_end / MH4U_SKIP_END: buttons held together to end
                                            // the wait after a quest (ZL+ZR), with everyone's say-so online
     float skip_end_hold = 1.0f;  // skip_end_hold / MH4U_SKIP_END_HOLD: seconds they are held
+    u32 text_skip_button = 0x2000;  // text_skip / MH4U_TEXT_SKIP: 3DS button that shows the rest of a
+                                    // page of text being typed out at once, as RPGs do (A; off: none)
     u32 skip_panel = 0xb;   // skip_panel: the touch-screen button whose tap the skip button makes
                             // (the panel manager's Skip, 0xb, as the stylus's tap on it shows)
     int skip_hint = 1;      // skip_hint / MH4U_SKIP_HINT: 0 off, 1 a hint on screen, 2 flashing
@@ -271,6 +273,8 @@ void Set(Options& o, const std::string& key, const std::string& value) {
         o.target_button = PadBit(value);
     } else if (key == "skip") {
         o.skip_button = PadBit(value);
+    } else if (key == "text_skip") {
+        o.text_skip_button = IsOff(value) ? 0 : PadBit(value);
     } else if (key == "skip_end") {
         o.skip_end_buttons = PadBits(value);
     } else if (key == "skip_end_hold") {
@@ -338,6 +342,7 @@ Options LoadOptions(std::vector<std::string>& log) {
         {"MH4U_FPS", "fps"},
         {"MH4U_REFRESH_RATE", "refresh_rate"},
         {"MH4U_WIDESCREEN", "widescreen"},
+        {"MH4U_TEXT_SKIP", "text_skip"},
         {"MH4U_FOV", "fov"},
         {"MH4U_WIDE_RENDER", "wide_render"},
         {"MH4U_TRACE_FRAMES", "trace_frames"},
@@ -920,6 +925,46 @@ void PanelIsTapped(RCtx* ctx, RFunc original) {
     }
 }
 
+// ── Text typed out letter by letter (cGUIInstText, MT Framework's GUI text): a press of
+// text_skip while a page is being typed shows the rest of it at once, as in RPGs; the next press
+// goes on as the game's own does. Read from the disassembly (USA v1.3.0, confidence medium):
+// cGUIInstText (vtable 0x00e5e300) updates its typing in vtable +0x28 (0x002859f8, (this, s0 =
+// seconds)); +0x118 is its state (1 typing, 2 timed wait, 3 and 4 waiting for the next page, 5 the
+// end), +0x110 its request bits (0x100 and 0x200 next page, set by 0x002858f4 and 0x002858e0;
+// 0x400 skip to the page's end, which the update itself honours: it moves the cursor to the next
+// page break and waits there), +0xd4 the text (0: none).
+constexpr u32 TEXT_REQUESTS = 0x110;
+constexpr u32 TEXT_STATE = 0x118;
+constexpr u32 TEXT_CONTENT = 0xd4;
+constexpr u32 TEXT_STATE_TYPING = 1;
+constexpr u32 TEXT_SKIP_TO_PAGE_END = 0x400;
+constexpr u32 TEXT_NEXT_PAGE = 0x100 | 0x200;
+bool text_skip_held = false;
+u64 text_skip_pressed_at = ~0ull;  // the frame of the last press
+u32 text_completed = 0;            // the text the last press completed, and when
+u64 text_completed_at = 0;
+
+void GuiTextUpdate(RCtx* ctx, RFunc original) {
+    const u32 text = ctx->r[0];
+    if (options.text_skip_button && rd32(ctx, text + TEXT_CONTENT) != 0) {
+        const u32 state = rd32(ctx, text + TEXT_STATE);
+        const u32 requests = rd32(ctx, text + TEXT_REQUESTS);
+        const bool pressed = text_skip_pressed_at != ~0ull && frames - text_skip_pressed_at <= 1;
+        if (state == TEXT_STATE_TYPING && pressed) {
+            // the press shows the page; it isn't also the game's "next page" (that waits for the
+            // next press), so the requests it may have made for this text are dropped
+            wr32(ctx, text + TEXT_REQUESTS, (requests | TEXT_SKIP_TO_PAGE_END) & ~TEXT_NEXT_PAGE);
+            text_completed = text;
+            text_completed_at = frames;
+            text_skip_pressed_at = ~0ull;  // one page a press
+        } else if (text == text_completed && frames - text_completed_at <= 3 && (requests & TEXT_NEXT_PAGE)) {
+            // the same press reaching the game a frame later: not a request for the next page
+            wr32(ctx, text + TEXT_REQUESTS, requests & ~TEXT_NEXT_PAGE);
+        }
+    }
+    original(ctx);
+}
+
 /// sMhPad::update(this): turns pad state and the panels' injected bits into actions.
 /// The kick button injects the kick for the next update, like the touch panel does (the
 /// button keeps its own action too, so pick one the game doesn't use).
@@ -944,6 +989,14 @@ void MhPadUpdate(RCtx* ctx, RFunc original) {
             wr8(ctx, QUEST_HUD + HUD_TARGET_REQUEST, 1);
         }
         target_held = now;
+    }
+    // the text skip's button: the frame it was pressed (GuiTextUpdate completes the page then)
+    if (options.text_skip_button) {
+        const bool now = (held & options.text_skip_button) != 0;
+        if (now && !text_skip_held) {
+            text_skip_pressed_at = frames;
+        }
+        text_skip_held = now;
     }
     UpdateSkip(ctx);
     const bool offered = skip_offered.load(std::memory_order_relaxed);
@@ -1530,6 +1583,7 @@ constexpr Hook HOOKS[] = {
     {0x0028f2f0, "PanelManager::touchAllowed", PanelTouchAllowed},
     {0x00288f4c, "PanelManager::isTapped", PanelIsTapped},
     {0x00694c98, "sMhPad::update", MhPadUpdate},
+    {0x002859f8, "cGUIInstText::updateTyping", GuiTextUpdate},
     {0x00bfcfd8, "sMhCamera::turnByInput", CameraTurnByInput},
     {0x00b7c010, "QuestFlow::startQuest", StartQuest},
     {0x0065c18c, "aQuest::playing", QuestPlaying},
@@ -1879,7 +1933,7 @@ bool SetOption(const std::string& key, const std::string& value) {
     static constexpr std::string_view live[] = {
         "fps", "refresh_rate", "fov", "dither", "stereo_3d", "antialiasing", "render_flags_set", "render_flags_clear",
         "kick",
-        "target", "skip", "skip_panel", "skip_hint", "skip_end", "skip_end_hold", "touch_overlay",
+        "target", "skip", "skip_panel", "text_skip", "skip_hint", "skip_end", "skip_end_hold", "touch_overlay",
         "quest_overlay", "target_overlay",
         "hud_edges", "trace_frames", "trace_layout", "trace_panels", "bloom", "motion_blur",
         "depth_of_field", "radial_blur", "haze", "trace_filters"};

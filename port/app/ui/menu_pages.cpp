@@ -709,6 +709,7 @@ void Menu::DrawGameplay() {
     if (BeginSettings("##buttons")) {
         DrawButtonList(R::GameplayKick, "kick");
         DrawButtonList(R::GameplayTarget, "target");
+        DrawButtonList(R::GameplayTextSkip, "text_skip");
         EndSettings();
     }
 
