@@ -95,6 +95,7 @@ void Window::ReadKeys() {
     key_guides_key = Input::KeyCode(config.key_guides_key);
     pause_keys = Input::KeyCodes(config.pause_key);
     fast_forward_keys = Input::KeyCodes(config.fast_forward_key);
+    take_all_keys = Input::KeyCodes(config.take_all_key);
     tap_keys.clear();
     for (const auto& tap : config.touch_taps) {
         const auto codes = Input::KeyCodes(tap.keys);
@@ -247,6 +248,13 @@ void Window::OnKey(int scancode, bool down, u16 modifiers) {
         }
         return;
     }
+    // the quest rewards' "take every item" (input.cpp)
+    if (std::find(take_all_keys.begin(), take_all_keys.end(), scancode) != take_all_keys.end()) {
+        if (down && !is_secondary) {
+            Input::TakeAllRewards();
+        }
+        return;
+    }
     // pause and fast forward (speed.h): the main loop does what they ask
     if (std::find(pause_keys.begin(), pause_keys.end(), scancode) != pause_keys.end()) {
         Speed::Get().PauseKey(down, SDL_GetTicks());
@@ -264,12 +272,11 @@ void Window::OnKey(int scancode, bool down, u16 modifiers) {
 }
 
 void Window::PadExtraAction(int button, bool down) {
-    // a back paddle or the share button given one of the port's own actions (Config::pad_extra:
-    // map, pause, fast_forward, key_guides, fps_counter); one given a 3DS button is the input
+    // a stick's click given one of the port's own actions (Config::pad_extra: map,
+    // pause, fast_forward, key_guides, fps_counter, take_all); one given a 3DS button is the input
     // profile's (input.cpp)
-    static constexpr int BUTTONS[Config::PAD_EXTRA_COUNT] = {
-        SDL_CONTROLLER_BUTTON_PADDLE1, SDL_CONTROLLER_BUTTON_PADDLE2, SDL_CONTROLLER_BUTTON_PADDLE3,
-        SDL_CONTROLLER_BUTTON_PADDLE4, SDL_CONTROLLER_BUTTON_MISC1};
+    static constexpr int BUTTONS[Config::PAD_EXTRA_COUNT] = {SDL_CONTROLLER_BUTTON_LEFTSTICK,
+                                                           SDL_CONTROLLER_BUTTON_RIGHTSTICK};
     for (int e = 0; e < Config::PAD_EXTRA_COUNT; ++e) {
         if (BUTTONS[e] != button) {
             continue;
@@ -287,6 +294,10 @@ void Window::PadExtraAction(int button, bool down) {
         } else if (action == "key_guides") {
             if (down) {
                 Ui::ToggleKeyGuides();
+            }
+        } else if (action == "take_all") {
+            if (down) {
+                Input::TakeAllRewards();
             }
         } else if (action == "fps_counter") {
             if (down) {
@@ -427,8 +438,9 @@ void Window::PollEvents() {
             TouchReleased();
             break;
         case SDL_CONTROLLERBUTTONDOWN:
-            // the 3DS has no stick clicks: the right one is the port's touch-screen switch
-            if (event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
+            // the 3DS has no stick clicks: the right one is the port's touch-screen switch, unless
+            // the player gave it another job (Config::pad_extra)
+            if (event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSTICK && config.pad_extra[1] == "off") {
                 Ui::TouchScreenKey(SDL_GetTicks());
             }
             PadExtraAction(event.cbutton.button, true);

@@ -255,8 +255,7 @@ std::string PadButtonParam(const Common::ParamPackage& pad, const std::string& n
 }
 
 /// The SDL names of the extra buttons, in Config::pad_extra's order.
-constexpr const char* PAD_EXTRA_BUTTONS[Config::PAD_EXTRA_COUNT] = {"paddle1", "paddle2", "paddle3", "paddle4",
-                                                                    "misc1"};
+constexpr const char* PAD_EXTRA_BUTTONS[Config::PAD_EXTRA_COUNT] = {"leftstick", "rightstick"};
 
 /// The 3DS button a short name means ("A", "zl", "START"), or -1 (off, or no such button).
 int NativeButtonByName(const std::string& name) {
@@ -270,6 +269,10 @@ int NativeButtonByName(const std::string& name) {
 }
 
 // ── Timed presses: the item bar's L+Y / L+A and the wheel's keys ──
+
+Kbm::Sequence take_all;
+std::atomic<bool> take_all_requested{false};
+std::atomic<int> take_all_done{0}, take_all_total{0};  // for the menu's notice (ui.cpp)
 
 Kbm::ItemScroll item_scroll(MACRO_KEY + NativeButton::L, MACRO_KEY + NativeButton::Y,
                             MACRO_KEY + NativeButton::A);
@@ -477,7 +480,7 @@ void BuildProfile(const Config& config) {
             } else if (const auto bind = InputCommon::GetControllerButtonBinds(pad_base, i); bind.Has("engine")) {
                 from_pad.push_back(bind.Serialize());
             }
-            // and the extra buttons (back paddles, misc) given to it
+            // and the stick clicks given to it (Config::pad_extra)
             for (int e = 0; e < Config::PAD_EXTRA_COUNT; ++e) {
                 if (NativeButtonByName(config.pad_extra[e]) == i) {
                     from_pad.push_back(PadButtonParam(pad_base, PAD_EXTRA_BUTTONS[e]));
@@ -592,6 +595,16 @@ void Wheel(const Config& config, int code) {
     }
 }
 
+void TakeAllRewards() {
+    take_all_requested.store(true);
+}
+
+bool TakeAllProgress(int& done, int& total) {
+    total = take_all_total.load(std::memory_order_relaxed);
+    done = take_all_done.load(std::memory_order_relaxed);
+    return total > 0 || take_all_requested.load(std::memory_order_relaxed);
+}
+
 void Tick(const Config& config) {
     const auto now = std::chrono::steady_clock::now();
     const double dt = mouse_last == std::chrono::steady_clock::time_point{}
@@ -625,6 +638,28 @@ void Tick(const Config& config) {
     }
     Apply(pulses.Tick());
     Apply(item_scroll.Tick());
+    if (take_all_requested.exchange(false)) {
+        // the reward box: 6 rows of 8 slots, the cursor on the first; A on each, the D-pad between
+        constexpr int ROWS = 6, COLUMNS = 8;
+        const int a = MACRO_KEY + NativeButton::A;
+        std::vector<int> codes;
+        for (int row = 0; row < ROWS; ++row) {
+            const int along = MACRO_KEY + (row % 2 == 0 ? NativeButton::Right : NativeButton::Left);
+            for (int column = 0; column < COLUMNS; ++column) {
+                codes.push_back(a);
+                if (column + 1 < COLUMNS) {
+                    codes.push_back(along);
+                }
+            }
+            if (row + 1 < ROWS) {
+                codes.push_back(MACRO_KEY + NativeButton::Down);
+            }
+        }
+        take_all.Start(std::move(codes));
+    }
+    Apply(take_all.Tick());
+    take_all_done.store(take_all.Idle() ? 0 : static_cast<int>(take_all.Done()), std::memory_order_relaxed);
+    take_all_total.store(take_all.Idle() ? 0 : static_cast<int>(take_all.Size()), std::memory_order_relaxed);
     // where the stylus touches, in the touch screen's pixels as the console counts them
     if (!stylus) {
         stylus = ::Input::CreateDevice<::Input::TouchDevice>("engine:emu_window");

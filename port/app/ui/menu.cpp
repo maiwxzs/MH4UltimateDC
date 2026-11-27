@@ -56,7 +56,7 @@ const std::map<std::string, std::string> GAME_DEFAULTS = {
     {"skip_end_hold", "1.0"}};
 const std::set<std::string> GAME_LIVE = {"fps",           "refresh_rate", "fov", "hud_edges", "touch_overlay",
                                          "quest_overlay", "target_overlay", "kick",    "target",
-                                         "skip",          "skip_hint",    "text_skip", "result_skip",    "skip_end", "skip_end_hold",
+                                         "skip",          "skip_hint",    "text_skip", "result_skip", "gather_speed",    "skip_end", "skip_end_hold",
                                          "dither",
                                          "stereo_3d",     "antialiasing", "bloom",         "depth_of_field", "motion_blur",
                                          "radial_blur",   "haze"};

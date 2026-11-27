@@ -27,6 +27,30 @@ std::pair<float, float> MouseCamera::Tick(double dt, const CameraSettings& s) {
     return {static_cast<float>(x * pushed / length), static_cast<float>(y * pushed / length)};
 }
 
+void Sequence::Start(std::vector<int> codes_) {
+    codes = std::move(codes_);
+    next = 0;
+    down = false;
+    count = 0;
+}
+
+KeyEvents Sequence::Tick() {
+    if (next >= codes.size() && !down) {
+        return {};
+    }
+    if (count > 0) {
+        --count;
+        return {};
+    }
+    count = frames - 1;
+    if (down) {
+        down = false;
+        return {{codes[next++], false}};
+    }
+    down = true;
+    return {{codes[next], true}};
+}
+
 void ItemScroll::Queue(int direction) {
     queued = std::clamp(queued + (direction < 0 ? -1 : 1), -5, 5);
 }

@@ -135,6 +135,8 @@ struct Options {
                                   // part of slot n all the time (to check the drawing)
     bool hud_edges = true;  // hud_edges / MH4U_HUD_EDGES: with wide_render, HUD to the edges
     u32 trace_layout = 0;   // trace_layout / MH4U_TRACE_LAYOUT: log HUD objects every n frames
+    float gather_speed = 1.0f;  // gather_speed / MH4U_GATHER_SPEED: carving and gathering's
+                                // animations, times this (150 or 1.5: half again as fast)
     bool trace_actions = false;  // trace_actions / MH4U_TRACE_ACTIONS: log the hunters' actions as
                                  // they change (to find carving's and gathering's)
     NetSync::Mode net_sync = NetSync::Mode::Session;  // net_sync / MH4U_NET_SYNC
@@ -306,6 +308,10 @@ void Set(Options& o, const std::string& key, const std::string& value) {
         o.net_sync_slack = std::max(0.0f, std::strtof(value.c_str(), nullptr));
     } else if (key == "hud_edges") {
         o.hud_edges = IsOn(value);
+    } else if (key == "gather_speed") {
+        float f = IsOff(value) ? 1.0f : std::strtof(value.c_str(), nullptr);
+        f = f > 5.0f ? f / 100.0f : f;
+        o.gather_speed = f > 0.0f ? std::clamp(f, 1.0f, 4.0f) : 1.0f;
     } else if (key == "trace_actions") {
         o.trace_actions = IsOn(value);
     } else if (key == "trace_layout") {
@@ -375,6 +381,7 @@ Options LoadOptions(std::vector<std::string>& log) {
         {"MH4U_RENDER_FLAGS_CLEAR", "render_flags_clear"},
         {"MH4U_TRACE_LAYOUT", "trace_layout"},
         {"MH4U_TRACE_ACTIONS", "trace_actions"},
+        {"MH4U_GATHER_SPEED", "gather_speed"},
         {"MH4U_NET_SYNC", "net_sync"},
         {"MH4U_NET_SYNC_SLACK", "net_sync_slack"},
         {"MH4U_BLOOM", "bloom"},
@@ -1014,16 +1021,67 @@ constexpr u32 PLAYER_MOTION_SPEED = 0xc0;
 constexpr u32 HUNTER_VTABLES[] = {0x00e6bcd4, 0x00e6edbc, 0x00e6ef2c, 0x00e6f09c, 0x00e6f20c, 0x00e6f37c, 0x00e6f4ec, 0x00e6f65c, 0x00e6f7cc, 0x00e6f93c, 0x00e6faac, 0x00e6fc1c, 0x00e6fefc};
 std::unordered_map<u32, u32> traced_actions;  // char -> act_no << 8 | act_st last logged
 
+// The actions gather_speed hastens, from a trace_actions log of a hunt (USA v1.3.0): 77 gathering
+// by hand, 78 mining or catching bugs (after 24, taking the tool out), 83 carving.
+constexpr u8 GATHER_ACTIONS[] = {77, 78, 83};
+struct Hastened {
+    u32 action = ~0u;  // the action whose speed was read
+    float own = 0.0f;  // its motion speed as the game set it
+};
+std::unordered_map<u32, Hastened> hastened;  // char -> the action being hastened
+
+bool IsHunter(RCtx* ctx, u32 chr) {
+    const u32 vtable = rd32(ctx, chr);
+    return std::find(std::begin(HUNTER_VTABLES), std::end(HUNTER_VTABLES), vtable) != std::end(HUNTER_VTABLES);
+}
+
+/// gather_speed: while a hunter carves or gathers, its motion speed is the game's own for that
+/// action times gather_speed, set before and after the move (so that a speed the game sets once
+/// at the action's start, or each frame, both end up hastened; never multiplied twice).
+void HastenGathering(RCtx* ctx, u32 chr, bool after) {
+    const u32 base = rd32(ctx, chr + CHAR_BASE_WORK);
+    const u32 work = rd32(ctx, chr + CHAR_PLAYER_WORK);
+    if (base == 0 || work == 0) {
+        return;
+    }
+    const u8 act_no = rd8(ctx, base + BASE_ACT_NO);
+    const bool gathering = std::find(std::begin(GATHER_ACTIONS), std::end(GATHER_ACTIONS), act_no) !=
+                           std::end(GATHER_ACTIONS);
+    auto it = hastened.find(chr);
+    if (!gathering) {
+        if (it != hastened.end()) {
+            hastened.erase(it);
+        }
+        return;
+    }
+    const u32 action = static_cast<u32>(act_no) << 8 | rd8(ctx, base + BASE_ACT_ST);
+    const float now = ReadF32(ctx, work + PLAYER_MOTION_SPEED);
+    if (it == hastened.end() || it->second.action != action) {
+        if (!after) {
+            return;  // the game sets the new action's speed in this move: read it after
+        }
+        it = hastened.insert_or_assign(chr, Hastened{action, now > 0.0f ? now : 1.0f}).first;
+    } else if (now > 0.0f && std::fabs(now - it->second.own * options.gather_speed) > 0.001f &&
+               std::fabs(now - it->second.own) > 0.001f) {
+        it->second.own = now;  // the game changed the speed within the action
+    }
+    WriteF32(ctx, work + PLAYER_MOTION_SPEED, it->second.own * options.gather_speed);
+}
+
 void CharMove(RCtx* ctx, RFunc original) {
     const u32 chr = ctx->r[0];
+    const bool hasten = options.gather_speed > 1.001f && chr != 0 && IsHunter(ctx, chr);
+    if (hasten) {
+        HastenGathering(ctx, chr, false);
+    }
     original(ctx);
-    if (!options.trace_actions || chr == 0) {
+    if (hasten) {
+        HastenGathering(ctx, chr, true);
+    }
+    if (!options.trace_actions || chr == 0 || !IsHunter(ctx, chr)) {
         return;
     }
     const u32 vtable = rd32(ctx, chr);
-    if (std::find(std::begin(HUNTER_VTABLES), std::end(HUNTER_VTABLES), vtable) == std::end(HUNTER_VTABLES)) {
-        return;
-    }
     const u32 base = rd32(ctx, chr + CHAR_BASE_WORK);
     if (base == 0) {
         return;
@@ -2013,7 +2071,7 @@ bool SetOption(const std::string& key, const std::string& value) {
         "kick",
         "target", "skip", "skip_panel", "text_skip", "result_skip", "skip_hint", "skip_end", "skip_end_hold", "touch_overlay",
         "quest_overlay", "target_overlay",
-        "hud_edges", "trace_frames", "trace_layout", "trace_actions", "trace_panels", "bloom", "motion_blur",
+        "hud_edges", "trace_frames", "trace_layout", "trace_actions", "gather_speed", "trace_panels", "bloom", "motion_blur",
         "depth_of_field", "radial_blur", "haze", "trace_filters"};
     if (std::find(std::begin(live), std::end(live), key) == std::end(live)) {
         return false;

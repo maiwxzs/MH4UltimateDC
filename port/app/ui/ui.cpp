@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <string>
 #include <SDL.h>
+#include <fmt/format.h>
 #include <imgui.h>
 #include <imgui_impl_sdl2.h>
 
@@ -643,7 +644,21 @@ void Layer::Frame() {
     // pause and fast forward, under nothing of the menu's
     const std::string speed = capturing ? std::string() : Speed::Get().Badge(SDL_GetTicks());
     // why the touch-screen key changed nothing (ui/hint.h), for a few seconds
-    const std::string notice = capturing ? std::string() : TouchScreenNotice(SDL_GetTicks());
+    std::string notice = capturing ? std::string() : TouchScreenNotice(SDL_GetTicks());
+    // the quest rewards' "take every item" while it runs, and a moment after (input.cpp)
+    {
+        static std::uint32_t take_all_ended = 0;
+        int done = 0, total = 0;
+        const std::uint32_t now = SDL_GetTicks();
+        if (Input::TakeAllProgress(done, total)) {
+            take_all_ended = now;
+            if (!capturing && total > 0) {
+                notice = fmt::format("{} {}/{}", Lang::Tr("Taking every reward..."), done, total);
+            }
+        } else if (!capturing && take_all_ended != 0 && now - take_all_ended < 1500) {
+            notice = Lang::Tr("Every reward taken: what didn't fit is still in the box");
+        }
+    }
     const bool draw = capturing || keyboard->HasNotice() || !hint.Empty() || fps_counter || guides ||
                       !speed.empty() || !notice.empty();
     if (!draw || !renderer_ready.load(std::memory_order_acquire)) {

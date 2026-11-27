@@ -76,6 +76,15 @@ void Wheel(const Config& config, int code);
 /// bar's L+Y / L+A, the wheel's), and where the stylus touches.
 void Tick(const Config& config);
 
+/// The quest rewards' "take every item" (any thread): with Receive items or Send to item box
+/// chosen, presses A on each of the reward box's 6 rows of 8 slots in turn, moving from slot to
+/// slot with the D-pad (along the first row, back along the second and so on); a full pouch
+/// shows the game's own message.
+void TakeAllRewards();
+
+/// While "take every item" runs: how many of its presses are done of `total`; false when idle.
+bool TakeAllProgress(int& done, int& total);
+
 /// Where the stylus (the mouse, a finger) last touched the touch screen, in its pixels; false
 /// until it has. The menu's touch taps take a point from it.
 bool LastTouch(int& x, int& y);

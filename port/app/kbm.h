@@ -63,6 +63,33 @@ private:
     int button = 0;
 };
 
+/// A run of presses, one after another: each key held `frames` frames, then let go for as many
+/// (the quest rewards' "take every item": A on a slot, the D-pad to the next).
+class Sequence {
+public:
+    explicit Sequence(int frames = 3) : frames(frames) {}
+    /// Starts `codes` from the first (one already running is dropped).
+    void Start(std::vector<int> codes);
+    /// A frame: the key to press or let go now.
+    KeyEvents Tick();
+    bool Idle() const {
+        return next >= codes.size() && !down;
+    }
+    size_t Done() const {
+        return next;
+    }
+    size_t Size() const {
+        return codes.size();
+    }
+
+private:
+    int frames;
+    std::vector<int> codes;
+    size_t next = 0;
+    bool down = false;
+    int count = 0;
+};
+
 /// Keys held for a few frames (a wheel's turn is a press without a release).
 class Pulses {
 public:

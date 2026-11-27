@@ -1,4 +1,5 @@
 #include "ui/hint.h"
+#include "ui/lang.h"
 
 #include <algorithm>
 #include <cmath>
@@ -133,27 +134,27 @@ void DrawHint(const Hint& hint, bool flash) {
                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize;
     if (ImGui::Begin("##hint", nullptr, flags)) {
         if (!hint.skip.empty()) {
-            ImGui::TextUnformatted("Skip: ");
+            ImGui::TextUnformatted(Lang::Tr("Skip: "));
             ImGui::SameLine(0.0f, 0.0f);
             ImGui::TextColored(amber, "%s", hint.skip.c_str());
         }
         if (!hint.end.empty()) {
             if (hint.requested) {
                 if (hint.waiting_for.empty()) {
-                    ImGui::TextColored(amber, "Ending the quest...");
+                    ImGui::TextColored(amber, "%s", Lang::Tr("Ending the quest..."));
                 } else {
                     std::string names;
                     for (const std::string& name : hint.waiting_for) {
                         names += (names.empty() ? "" : ", ") + name;
                     }
-                    ImGui::TextUnformatted("Waiting for ");
+                    ImGui::TextUnformatted(Lang::Tr("Waiting for "));
                     ImGui::SameLine(0.0f, 0.0f);
                     ImGui::TextColored(amber, "%s", names.c_str());
                     ImGui::SameLine(0.0f, 0.0f);
-                    ImGui::TextUnformatted(" to end the quest");
+                    ImGui::TextUnformatted(Lang::Tr(" to end the quest"));
                 }
             } else {
-                ImGui::TextColored(dim, "End the quest: hold ");
+                ImGui::TextColored(dim, "%s", Lang::Tr("End the quest: hold "));
                 ImGui::SameLine(0.0f, 0.0f);
                 ImGui::TextColored(amber, "%s", hint.end.c_str());
                 if (hint.hold > 0.0f) {

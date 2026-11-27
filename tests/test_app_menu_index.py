@@ -222,7 +222,7 @@ def test_texts_ascii_and_short(rows, sections):
 
 
 # mh4u.ini's keys the menu writes (Menu::SetGame), as before the reorganisation
-GAME_KEYS = {"fps", "refresh_rate", "fov", "text_skip", "result_skip", "widescreen", "wide_render", "hud_edges", "touch_overlay", "quest_overlay",
+GAME_KEYS = {"fps", "refresh_rate", "fov", "text_skip", "result_skip", "gather_speed", "widescreen", "wide_render", "hud_edges", "touch_overlay", "quest_overlay",
              "target_overlay", "kick", "target", "skip", "skip_end", "skip_end_hold", "skip_hint", "dither",
              "stereo_3d", "antialiasing", "bloom", "depth_of_field", "motion_blur", "radial_blur", "haze",
              "net_sync"}
@@ -240,8 +240,7 @@ APP_SETTINGS = {
     "[Display] menu_scale", "[Display] language", "[Controls] camera_stick", "[Controls] camera_speed", "[Controls] camera_vertical",
     "[Controls] camera_invert_x", "[Controls] camera_invert_y", "[Controls] stick_deadzone", "[Controls] stick_outer",
     "[Controls] stick_curve", "[Controls] stick_anti_deadzone", "[Controls] camera_deadzone",
-    "[Controls] camera_outer", "[Controls] camera_curve", "[Controls] paddle_1", "[Controls] paddle_2",
-    "[Controls] paddle_3", "[Controls] paddle_4", "[Controls] misc_button",
+    "[Controls] camera_outer", "[Controls] camera_curve", "[Controls] left_stick_click", "[Controls] right_stick_click",
     *(f"[Controls] button_{b}" for b in ("a", "b", "x", "y", "l", "r", "zl", "zr", "start", "select", "up", "down",
                                          "left", "right")),
 }
@@ -311,7 +310,7 @@ def search(driver, query: str, *extra: str) -> tuple[bool, list[tuple[int, str]]
     ("bloom", {"graphics.bloom"}),
     ("60", {"display.fps", "display.refresh_rate"}),
     ("opacity", {"touch.opacity"}),
-    ("carving", {"gameplay.skip_end"}),
+    ("carving", {"gameplay.skip_end", "gameplay.gather_speed"}),
     ("textures", {"graphics.custom_textures"}),
     # what came from Game > Picture, and Draw the wider picture by its name
     ("picture", FROM_PICTURE | {"display.wide_render"}),

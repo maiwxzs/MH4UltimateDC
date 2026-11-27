@@ -12,9 +12,8 @@
 
 namespace App {
 
-/// The ini keys of the controller's extra buttons (Config::pad_extra), in its order: the back
-/// paddles and the misc (share, capture) button.
-inline constexpr const char* PAD_EXTRA_NAMES[] = {"paddle_1", "paddle_2", "paddle_3", "paddle_4", "misc_button"};
+/// The ini keys of the controller's extra buttons (Config::pad_extra): the sticks' clicks.
+inline constexpr const char* PAD_EXTRA_NAMES[] = {"left_stick_click", "right_stick_click"};
 
 struct Config {
     // [Game]
@@ -76,6 +75,8 @@ struct Config {
     /// Playing alone (not in a room): stops the game where it is, and runs it at
     /// fast_forward_speed (speed.h). A key a settings file already uses elsewhere isn't taken.
     std::string pause_key = "P";
+    /// The quest rewards' "take every item" (Input::TakeAllRewards); empty: no key
+    std::string take_all_key;
     std::string fast_forward_key = "Tab";
     bool fast_forward_hold = false;  ///< fast only while the key is held (off: press to start and stop)
     /// auto: the keyboard and mouse's way (the mouse turns the camera, the key guides show) while
@@ -107,13 +108,14 @@ struct Config {
     bool camera_invert_y = false;
     /// The controller's buttons for a 3DS button by SDL's names (a, b, x, y, leftshoulder,
     /// rightshoulder, lefttrigger, righttrigger, back, start, leftstick, rightstick, dpup, dpdown,
-    /// dpleft, dpright, misc1, paddle1-4), several separated by |; empty: the automatic mapping
+    /// dpleft, dpright), several separated by |; empty: the automatic mapping
     std::array<std::string, Settings::NativeButton::NumButtons> pad_buttons;
-    /// The controller's extra buttons (back paddles 1-4 and the misc/share button) as a further
-    /// button for a 3DS button (A, B, X, Y, L, R, ZL, ZR, START, SELECT, UP, DOWN, LEFT, RIGHT)
-    /// besides its own, or off. Only the paddles that Windows and SDL see work (paddle_note)
-    static constexpr int PAD_EXTRA_COUNT = 5;
-    std::array<std::string, PAD_EXTRA_COUNT> pad_extra = {"off", "off", "off", "off", "off"};
+    /// The left and right sticks' clicks (the 3DS has none, so they are free) as a further button for a 3DS
+    /// button (A, B, X, Y, L, R, ZL, ZR, START, SELECT, UP, DOWN, LEFT, RIGHT), one of the port's
+    /// actions, or off. A controller whose back buttons Windows hides (an Xbox one) can send it
+    /// from them, set in the controller's own app
+    static constexpr int PAD_EXTRA_COUNT = 2;
+    std::array<std::string, PAD_EXTRA_COUNT> pad_extra = {"off", "off"};
     std::string item_prev = "Wheel Up";    ///< scrolls the item bar left (L+Y)
     std::string item_next = "Wheel Down";  ///< and right (L+A)
     std::string stylus_key = "Left Alt";   ///< held: the mouse is the stylus again

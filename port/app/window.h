@@ -120,6 +120,7 @@ private:
     bool fullscreen = false;
     const Config& config;
     std::vector<int> touch_keys, stylus_keys, pause_keys, fast_forward_keys;
+    std::vector<int> take_all_keys;  // the quest rewards' "take every item" (config.take_all_key)
     std::vector<int> tap_keys;  ///< the touch taps' (taps.h)
     int fullscreen_key = 0, fps_counter_key = 0, key_guides_key = 0;
     std::atomic<bool> controllers_changed{false};

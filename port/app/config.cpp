@@ -224,6 +224,7 @@ Config Load() {
     c.fullscreen_key = str("Controls", "fullscreen_key", c.fullscreen_key);
     c.fps_counter_key = str("Controls", "fps_counter_key", c.fps_counter_key);
     c.pause_key = str("Controls", "pause_key", c.pause_key);
+    c.take_all_key = str("Controls", "take_all_key", c.take_all_key);
     c.fast_forward_key = str("Controls", "fast_forward_key", c.fast_forward_key);
     c.fast_forward_hold = flag("Controls", "fast_forward_hold", c.fast_forward_hold);
     // the touch taps (taps.h), touch_tap_1 to touch_tap_8
@@ -324,8 +325,8 @@ camera_vertical = {}
 camera_invert_x = {}
 camera_invert_y = {}
 # the controller's buttons for a 3DS button by SDL's names, several separated by | (pad_button_a =
-# b | paddle1): a, b, x, y, leftshoulder, rightshoulder, lefttrigger, righttrigger, back, start,
-# leftstick, rightstick, dpup, dpdown, dpleft, dpright, misc1, paddle1 to paddle4. Empty: the
+# b | leftstick): a, b, x, y, leftshoulder, rightshoulder, lefttrigger, righttrigger, back, start,
+# leftstick, rightstick, dpup, dpdown, dpleft, dpright. Empty: the
 # automatic mapping (controller = auto)
 )",
                                      c.stick_deadzone, c.stick_outer, c.stick_curve, c.stick_anti_deadzone,
@@ -337,9 +338,9 @@ camera_invert_y = {}
             sticks += fmt::format("pad_{} = {}\n", NativeButton::mapping[i], c.pad_buttons[i]);
         }
     }
-    sticks += "# the controller's back paddles and its misc (share) button as a further button for a 3DS button\n"
-              "# besides its own (A, B, X, Y, L, R, ZL, ZR, START, SELECT, UP, DOWN, LEFT, RIGHT), one of the\n"
-              "# port's actions (map, pause, fast_forward, key_guides, fps_counter) or off\n";
+    sticks += "# each stick's click (free on a 3DS) as a further button for a 3DS button (A, B, X, Y, L, R,\n"
+              "# ZL, ZR, START, SELECT, UP, DOWN, LEFT, RIGHT), one of the port's actions (map, pause,\n"
+              "# fast_forward, key_guides, fps_counter, take_all) or off\n";
     for (int i = 0; i < Config::PAD_EXTRA_COUNT; ++i) {
         sticks += fmt::format("{} = {}\n", PAD_EXTRA_NAMES[i], c.pad_extra[i]);
     }
@@ -471,6 +472,9 @@ fps_counter_key = {}
 pause_key = {}
 fast_forward_key = {}
 fast_forward_hold = {}
+# in the quest rewards, with Receive items or Send to item box chosen: A on every slot of the
+# reward box in turn (a full pouch shows the game's message). Empty: no key
+take_all_key = {}
 # touch taps: while one of a tap's keys is held, the touch screen is touched at the tap's point
 # (x 0-319 from its left edge, y 0-239 from its top edge, in its own pixels), say an item
 # shortcut or a panel; a name after the point is what the key guides show. Up to 8, touch_tap_1
@@ -520,7 +524,7 @@ catalog_url = {}
                        c.mouse_vertical, OnOff(c.mouse_invert_y), OnOff(c.mouse_invert_x), c.mouse_deadzone, sticks, c.item_prev, c.item_next,
                        c.stylus_key, c.key_guides, c.key_guides_key, c.controller_auto ? "auto" : "off", keys,
                        params, c.touch_screen_key, c.fullscreen_key, c.fps_counter_key, c.pause_key,
-                       c.fast_forward_key, OnOff(c.fast_forward_hold), taps, c.nickname, c.join, c.password,
+                       c.fast_forward_key, OnOff(c.fast_forward_hold), c.take_all_key, taps, c.nickname, c.join, c.password,
                        c.host, c.room_port, c.room_name, c.room_members, c.lobby, c.token,
                        OnOff(c.room_public), OnOff(c.lan_discovery), c.last_room, c.catalog_url);
 }

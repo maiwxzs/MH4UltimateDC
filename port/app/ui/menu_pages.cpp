@@ -163,8 +163,9 @@ void Menu::DrawDisplay() {
             if (std::atof(hz.c_str()) <= 0.0) {
                 hz = "0";
             }
-            if (ChooseValue("##hz", hz, {"0", "60", "120", "144", "165", "240"},
-                            {"Auto (the frame rate above 60)", "60 Hz", "120 Hz", "144 Hz", "165 Hz", "240 Hz"})) {
+            if (ChooseValue("##hz", hz, {"0", "60", "120", "144", "165", "180", "240"},
+                            {"Auto (the frame rate above 60)", "60 Hz", "120 Hz", "144 Hz", "165 Hz", "180 Hz",
+                             "240 Hz"})) {
                 SetGame("refresh_rate", hz);
             }
             EndRow(R::DisplayRefreshRate);
@@ -657,12 +658,11 @@ void Menu::DrawControls() {
         EndSettings();
     }
 
-    // the back paddles and the share button: a further button for a 3DS button (input.cpp)
+    // the sticks' clicks: a further button for a 3DS button or a port action (input.cpp)
     Section(S::ControlsPaddles);
     if (BeginSettings("##paddles")) {
-        static constexpr RowId rows[Config::PAD_EXTRA_COUNT] = {R::ControlsPaddle1, R::ControlsPaddle2,
-                                                                 R::ControlsPaddle3, R::ControlsPaddle4,
-                                                                 R::ControlsMiscButton};
+        static constexpr RowId rows[Config::PAD_EXTRA_COUNT] = {R::ControlsLeftStickClick,
+                                                                 R::ControlsRightStickClick};
         for (int e = 0; e < Config::PAD_EXTRA_COUNT; ++e) {
             if (!BeginRow(rows[e])) {
                 continue;
@@ -670,11 +670,11 @@ void Menu::DrawControls() {
             std::string value = Lower(config.pad_extra[e]);
             if (ChooseValue(fmt::format("##{}", PAD_EXTRA_NAMES[e]).c_str(), value,
                             {"off", "a", "b", "x", "y", "l", "r", "zl", "zr", "start", "select", "up", "down",
-                             "left", "right", "map", "pause", "fast_forward", "key_guides", "fps_counter"},
+                             "left", "right", "map", "pause", "fast_forward", "key_guides", "fps_counter", "take_all"},
                             {"Off", "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "START", "SELECT", "D-pad up",
                              "D-pad down", "D-pad left", "D-pad right", "Map / whole touch screen",
                              "Pause (playing alone)", "Fast forward (playing alone)", "Show / hide the key guides",
-                             "Frame-rate counter"})) {
+                             "Frame-rate counter", "Take every reward"})) {
                 config.pad_extra[e] = value;
                 ControlsChanged();
             }
@@ -710,6 +710,18 @@ void Menu::DrawGameplay() {
         DrawButtonList(R::GameplayKick, "kick");
         DrawButtonList(R::GameplayTarget, "target");
         DrawButtonList(R::GameplayTextSkip, "text_skip");
+        if (BeginRow(R::GameplayGatherSpeed)) {
+            // carving's and gathering's animations hastened (port/src/hooks.cpp, gather_speed)
+            std::string speed = Lower(Game("gather_speed"));
+            if (speed.empty() || IsOff(speed) || speed == "1") {
+                speed = "100";
+            }
+            if (ChooseValue("##gather_speed", speed, {"100", "150", "200", "250", "300"},
+                            {"100% (as it comes)", "150%", "200%", "250%", "300%"})) {
+                SetGame("gather_speed", speed);
+            }
+            EndRow(R::GameplayGatherSpeed);
+        }
         EndSettings();
     }
 

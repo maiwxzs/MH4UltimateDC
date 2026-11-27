@@ -204,11 +204,6 @@ constexpr PadChoice PAD_CHOICES[] = {
     {"dpdown", "D-pad down"},
     {"dpleft", "D-pad left"},
     {"dpright", "D-pad right"},
-    {"misc1", "Misc (share)"},
-    {"paddle1", "Paddle 1"},
-    {"paddle2", "Paddle 2"},
-    {"paddle3", "Paddle 3"},
-    {"paddle4", "Paddle 4"},
     {"none", "None"},
 };
 
@@ -549,8 +544,8 @@ void Menu::DrawKeyRow(RowId row, int index) {
             config.pad_buttons[b.button] = value;
             ControlsChanged();
         }
-        layer.Help("The controller's button for it. Auto: the automatic mapping. Back paddles: also in Controls, "
-                   "Controller.");
+        layer.Help("The controller's button for it. Auto: the automatic mapping. A back button: set it to send "
+                   "the left stick's click in the controller's own app, then choose Left stick click.");
         item = {};
         return;
     }
