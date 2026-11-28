@@ -432,6 +432,20 @@ void Menu::DrawTouchScreen() {
             }
             EndRow(R::TouchOpacity);
         }
+        if (BeginRow(R::TouchBig)) {
+            // the map key's big touch screen away from a quest's map (port/src/hooks.cpp)
+            std::string big = Lower(Game("touch_big"));
+            if (big.empty()) {
+                big = "75";
+            } else if (IsOff(big)) {
+                big = "off";
+            }
+            if (ChooseValue("##touch_big", big, {"off", "50", "60", "75", "90"},
+                            {"Off", "50%", "60%", "75%", "90%"})) {
+                SetGame("touch_big", big);
+            }
+            EndRow(R::TouchBig);
+        }
         EndSettings();
     }
 

@@ -45,7 +45,6 @@
 #include "core/loader/loader.h"
 #include "dialog.h"
 #include "frontend.h"
-#include "hooks.h"
 #include "input.h"
 #include "input_common/main.h"
 #include "invite.h"
@@ -241,10 +240,6 @@ void NewConsoleId(Core::System& system) {
 /// frontend's turbo sets it), and vsync off while fast (a vsynced swapchain would hold the game to
 /// the monitor's rate). Once a main-loop iteration; changes only what differs.
 void ApplySpeed(const App::Config& config) {
-    // taking every quest reward: the sweep over the reward box at 4x, a short animation (the
-    // reward screen only, playing alone only: speed.h)
-    int done = 0, total = 0;
-    App::Speed::Get().SetAuto(App::Input::TakeAllProgress(done, total) ? 400 : 0);
     const int limit = App::Speed::Get().Limit();
     const bool temporary = limit >= 0;
     if (Settings::is_temporary_frame_limit != temporary ||

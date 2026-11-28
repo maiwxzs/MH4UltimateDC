@@ -22,26 +22,52 @@ MAX_JUMP_TABLE = 4096
 
 
 class Image:
-    """The program image: `code` holds text|ro|data contiguously from `base`."""
+    """The program image: `code` holds text|ro|data contiguously from `base`.
 
-    def __init__(self, code: bytes, base: int, text_size: int):
+    A code mod may put code past the game's memory: `code_ranges`, [start, end) ranges of
+    `code` itself that hold code too (a mod's extension after the data), and `segments`,
+    (address, bytes) of code that isn't in `code` at all (files the mod loads at a fixed
+    address while it runs: Heavenfall's packs). Both count as text: their functions are
+    recompiled with the game's."""
+
+    def __init__(self, code: bytes, base: int, text_size: int,
+                 code_ranges: list[tuple[int, int]] | None = None,
+                 segments: list[tuple[int, bytes]] | None = None):
         self.code, self.base, self.text_size = code, base, text_size
         self.text_end = base + text_size
+        self.code_ranges = list(code_ranges or [])
+        self.segments = sorted(segments or [])
+
+    def _segment(self, a: int, size: int) -> tuple[bytes, int] | None:
+        for start, data in self.segments:
+            if start <= a and a + size <= start + len(data):
+                return data, a - start
+        return None
 
     def read32(self, a: int) -> int | None:
+        if a & 3:
+            return None
         off = a - self.base
-        if 0 <= off <= len(self.code) - 4 and not a & 3:
+        if 0 <= off <= len(self.code) - 4:
             return struct.unpack_from("<I", self.code, off)[0]
-        return None
+        seg = self._segment(a, 4)
+        return struct.unpack_from("<I", seg[0], seg[1])[0] if seg else None
 
     def read16(self, a: int) -> int | None:
+        if a & 1:
+            return None
         off = a - self.base
-        if 0 <= off <= len(self.code) - 2 and not a & 1:
+        if 0 <= off <= len(self.code) - 2:
             return struct.unpack_from("<H", self.code, off)[0]
-        return None
+        seg = self._segment(a, 2)
+        return struct.unpack_from("<H", seg[0], seg[1])[0] if seg else None
 
     def in_text(self, a: int) -> bool:
-        return self.base <= a < self.text_end
+        if self.base <= a < self.text_end:
+            return True
+        if any(start <= a < end for start, end in self.code_ranges):
+            return True
+        return any(start <= a < start + len(data) for start, data in self.segments)
 
 
 @dataclass

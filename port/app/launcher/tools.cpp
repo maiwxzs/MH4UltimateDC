@@ -224,6 +224,14 @@ std::vector<std::string> ModsCommand(const Python& python, const std::string& to
     return args;
 }
 
+std::vector<std::string> HeavenfallCommand(const Python& python, const std::string& tools,
+                                           const std::vector<std::string>& extra) {
+    std::vector<std::string> args = python.command;
+    args.insert(args.end(), {"-u", tools + "/heavenfall.py", "--json", "--user-dir", UserDir()});
+    args.insert(args.end(), extra.begin(), extra.end());
+    return args;
+}
+
 std::vector<std::string> UpdateCommand(const Python& python, const std::string& tools,
                                        const std::vector<std::string>& extra) {
     std::vector<std::string> args = python.command;

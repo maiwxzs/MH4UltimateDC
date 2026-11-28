@@ -195,6 +195,10 @@ const Row ROWS[] = {
      "100% hides the game behind it; less lets the game show through.",
      "opacity transparency transparent see through alpha game", "touch.overlay", "Touch screen over the game is on",
      false, false, "mh4u.ini touch_overlay"},
+    {"touch.big", "touch.corner", S, "Big on its key", nullptr,
+     "Out of a hunt (town, quest menu), the touch-screen key (F12, right-stick click) shows it big in the middle; again, back to its corner.",
+     "big large center middle touch screen menus town shop quest board f12 grande centro", "touch.overlay",
+     "Touch screen over the game is on", false, false, "mh4u.ini touch_big"},
     {"touch.map_only", "touch.quests", S, "Only the map in quests", nullptr,
      "In a quest the corner shows the map alone, and the whole touch screen again for the quest menu. The map key "
      "switches the two.",

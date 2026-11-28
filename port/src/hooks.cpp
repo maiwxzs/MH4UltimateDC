@@ -127,6 +127,8 @@ struct Options {
                             // (the panel manager's Skip, 0xb, as the stylus's tap on it shows)
     int skip_hint = 1;      // skip_hint / MH4U_SKIP_HINT: 0 off, 1 a hint on screen, 2 flashing
     Layout::ScreenOverlay touch_overlay;  // touch_overlay / MH4U_TOUCH_OVERLAY (custom layout)
+    float touch_big = 0.75f;  // touch_big: the touch screen big in the middle, this share of the
+                              // window's height, when the touch-screen key asks for it (0: off)
     PanelView quest_overlay{true};   // quest_overlay / MH4U_QUEST_OVERLAY: in quests, the map
                                      // alone, at its size and place
     PanelView target_overlay{true};  // target_overlay / MH4U_TARGET_OVERLAY: with it, the
@@ -221,6 +223,8 @@ Options options;
 u64 frames = 0;
 int missing_hook_points = 0;  // in the code library Install saw last
 std::atomic<bool> quest_map_off{false};  // ToggleQuestMap: the whole touch screen in quests too
+std::atomic<bool> touch_big_on{false};    // the touch-screen key: the whole touch screen big
+bool applied_big = false;                 // as ApplyQuestOverlay last laid it out
 
 // The frontend's surface shape (Port::SetWindowSize), for `widescreen = match`.
 u32 window_width = 0;
@@ -292,6 +296,9 @@ void Set(Options& o, const std::string& key, const std::string& value) {
         o.skip_panel = static_cast<u32>(std::clamp(std::strtol(value.c_str(), nullptr, 0), 0L, 0xffL));
     } else if (key == "skip_hint") {
         o.skip_hint = IsOff(value) ? 0 : value == "flash" ? 2 : 1;
+    } else if (key == "touch_big") {
+        const float f = IsOff(value) ? 0.0f : std::strtof(value.c_str(), nullptr);
+        o.touch_big = f > 1.0f ? std::clamp(f / 100.0f, 0.3f, 1.0f) : (f > 0.0f ? std::clamp(f, 0.3f, 1.0f) : 0.0f);
     } else if (key == "touch_overlay") {
         o.touch_overlay = ParseOverlay(value);
     } else if (key == "quest_overlay") {
@@ -1522,19 +1529,34 @@ int ShownTargetSlot(int map_slot) {
     return map_slot / 3 * 3 + (map_slot % 3 == 0 ? 2 : 0);
 }
 
+/// The whole touch screen big in the middle of the window, opaque: the touch-screen key's (for the
+/// town's menus, the quest menu, the item box), at touch_big of the window's height.
+Layout::ScreenOverlay BigTouchOverlay(const Layout::ScreenOverlay& touch) {
+    Layout::ScreenOverlay big = touch;
+    big.height = options.touch_big;
+    big.opacity = 1.0f;
+    big.x = 0.5f;
+    big.y = 0.5f;
+    return big;
+}
+
 /// The touch overlay as the options and the quest's panels now say.
 void ApplyQuestOverlay(bool force) {
     const int map = ShownMapSlot();
     const int target = ShownTargetSlot(map);
-    if (!force && map == applied_map_slot && target == applied_target_slot) {
+    const bool big = map < 0 && touch_big_on.load(std::memory_order_relaxed) && options.touch_big > 0.0f &&
+                     options.touch_overlay.height > 0;
+    if (!force && map == applied_map_slot && target == applied_target_slot && big == applied_big) {
         return;
     }
-    const bool changed = map != applied_map_slot || target != applied_target_slot;
+    const bool changed = map != applied_map_slot || target != applied_target_slot || big != applied_big;
     applied_map_slot = map;
     applied_target_slot = target;
-    Layout::SetScreenOverlay(map < 0 ? options.touch_overlay
-                                     : QuestOverlay(options.touch_overlay, map, options.quest_overlay,
-                                                    target, options.target_overlay));
+    applied_big = big;
+    Layout::SetScreenOverlay(map >= 0 ? QuestOverlay(options.touch_overlay, map, options.quest_overlay, target,
+                                                     options.target_overlay)
+                             : big    ? BigTouchOverlay(options.touch_overlay)
+                                      : options.touch_overlay);
     if (auto& system = Core::System::GetInstance(); frames > 0 && system.IsPoweredOn()) {
         // the screen layout is worked out when it changes, so work it out again
         system.GPU().Renderer().UpdateCurrentFramebufferLayout();
@@ -1542,7 +1564,9 @@ void ApplyQuestOverlay(bool force) {
     if (!changed || options.touch_overlay.height <= 0) {
         return;
     }
-    if (map < 0) {
+    if (big) {
+        LOG_INFO(Frontend, "touch overlay: the whole touch screen, big in the middle");
+    } else if (map < 0) {
         LOG_INFO(Frontend, "touch overlay: the whole touch screen");
     } else if (target < 0) {
         LOG_INFO(Frontend, "touch overlay: the quest's map (panel slot {})", map);
@@ -2068,7 +2092,18 @@ std::string PressQuestMapKey() {
         return {};
     }
     const MapView::KeyPress press = MapView::PressKey(MapViewState());
+    if (!press.note.empty() && options.touch_big > 0.0f && options.touch_overlay.height > 0 &&
+        MapView::Blocked(MapViewState()) != MapView::Block::Layout) {
+        // no quest map to switch to (in town, say): the whole touch screen big in the middle or
+        // back in its corner, for the menus the game draws there
+        const bool big = !touch_big_on.load();
+        touch_big_on = big;
+        LOG_INFO(Frontend, "touch overlay: the whole touch screen {}", big ? "big in the middle" : "in its corner");
+        return {};
+    }
     quest_map_off = press.switched;
+    // a quest's whole touch screen (the quest menu, the item shortcuts) comes big; the map, small
+    touch_big_on = press.note.empty() && press.switched;
     if (press.note.empty()) {
         LOG_INFO(Frontend, "touch overlay: {} in quests", press.switched ? "the whole touch screen" : "the map");
     } else {
@@ -2115,7 +2150,7 @@ bool SetOption(const std::string& key, const std::string& value) {
         "fps", "refresh_rate", "fov", "dither", "stereo_3d", "antialiasing", "render_flags_set", "render_flags_clear",
         "kick",
         "target", "skip", "skip_panel", "text_skip", "result_skip", "skip_hint", "skip_end", "skip_end_hold", "touch_overlay",
-        "quest_overlay", "target_overlay",
+        "touch_big", "quest_overlay", "target_overlay",
         "hud_edges", "trace_frames", "trace_layout", "trace_actions", "gather_speed", "trace_panels", "bloom", "motion_blur",
         "depth_of_field", "radial_blur", "haze", "trace_filters"};
     if (std::find(std::begin(live), std::end(live), key) == std::end(live)) {
@@ -2125,7 +2160,7 @@ bool SetOption(const std::string& key, const std::string& value) {
     if ((key == "refresh_rate" || key == "fps") && frames > 0) {
         Core::System::GetInstance().GPU().SetRefreshRate(RefreshRate()); // 0: the 3DS's
     }
-    if (key == "touch_overlay" || key == "quest_overlay" || key == "target_overlay") {
+    if (key == "touch_overlay" || key == "touch_big" || key == "quest_overlay" || key == "target_overlay") {
         // the corner as the options now say, with the quest's map in it if it shows the map
         ApplyQuestOverlay(true);
     }

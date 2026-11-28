@@ -23,8 +23,8 @@
 
 namespace Launcher {
 
-enum class Screen { Home, Setup, Mods, Online, Settings };
-inline constexpr int SCREEN_COUNT = 5;
+enum class Screen { Home, Setup, Mods, Heavenfall, Online, Settings };
+inline constexpr int SCREEN_COUNT = 6;
 const char* ScreenName(Screen screen);
 
 /// Short commands in child processes (mods.py, the code check), one at a time, their results
@@ -330,6 +330,7 @@ struct State {
 void DrawHome(State& state);
 void DrawSetup(State& state);
 void DrawMods(State& state);
+void DrawHeavenfall(State& state);
 void DrawOnline(State& state);
 void DrawSettings(State& state);
 

@@ -44,6 +44,11 @@ std::vector<std::string> BuildCommand(const Python& python, const std::string& t
 std::vector<std::string> ModsCommand(const Python& python, const std::string& tools,
                                      const std::vector<std::string>& args, u64 program_id = 0);
 
+/// tools/heavenfall.py with `extra` (status, install --rom ... --update ..., remove), its JSON
+/// line at the end; Azahar's user folder as the app's.
+std::vector<std::string> HeavenfallCommand(const Python& python, const std::string& tools,
+                                           const std::vector<std::string>& extra);
+
 /// update.py --json ARGS... (the launcher's Update button)
 std::vector<std::string> UpdateCommand(const Python& python, const std::string& tools,
                                        const std::vector<std::string>& args);

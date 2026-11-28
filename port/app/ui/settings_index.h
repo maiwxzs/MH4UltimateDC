@@ -105,6 +105,7 @@ enum class RowId : int {
     TouchCorner,
     TouchSize,
     TouchOpacity,
+    TouchBig,
     TouchMapOnly,
     TouchMapKey,
     TouchHudEditor,

@@ -270,7 +270,9 @@ int NativeButtonByName(const std::string& name) {
 
 // ── Timed presses: the item bar's L+Y / L+A and the wheel's keys ──
 
-Kbm::Sequence take_all;
+// one frame down and one up for each key: the game reads the pad each frame, so the sweep over the
+// reward box is quick without running anything faster
+Kbm::Sequence take_all{1};
 std::atomic<bool> take_all_requested{false};
 std::atomic<int> take_all_done{0}, take_all_total{0};  // for the menu's notice (ui.cpp)
 std::atomic<int> take_all_note{0};  // TakeAllNote(): how the last one went

@@ -861,6 +861,9 @@ void Frame(State& s) {
         case Screen::Mods:
             DrawMods(s);
             break;
+        case Screen::Heavenfall:
+            DrawHeavenfall(s);
+            break;
         case Screen::Online:
             DrawOnline(s);
             break;
@@ -914,6 +917,8 @@ const char* ScreenName(Screen screen) {
         return "Setup";
     case Screen::Mods:
         return "Mods";
+    case Screen::Heavenfall:
+        return "Heavenfall";
     case Screen::Online:
         return "Online";
     case Screen::Settings:

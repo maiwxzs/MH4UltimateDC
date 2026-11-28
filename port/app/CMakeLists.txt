@@ -123,6 +123,7 @@ target_sources(mh4u PRIVATE
     launcher/pick.h
     launcher/process.cpp
     launcher/process.h
+    launcher/screen_heavenfall.cpp
     launcher/screen_home.cpp
     launcher/screen_mods.cpp
     launcher/screen_online.cpp

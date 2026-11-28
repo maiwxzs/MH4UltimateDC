@@ -90,7 +90,9 @@ FORMAT = 1
 SECTIONS = ("code.bin", "icon.bin", "banner.bnr", "logo.bcma.lz")       # exefs/<name>, then <name>
 PATCHES = ("exefs/code.ips", "exefs/code.bps", "code.ips", "code.bps")  # the first found applies
 TOP_DIRS = ("romfs", "romfs_ext", "exefs")
-TOP_FILES = SECTIONS + ("code.ips", "code.bps", "exheader.bin")
+# recomp.json: a code mod's map of the code it adds past the game's memory, for the port's
+# recompiler (tools/code_mods.py RecompManifest; Heavenfall writes it); Azahar ignores it
+TOP_FILES = SECTIONS + ("code.ips", "code.bps", "exheader.bin", "recomp.json")
 EXT_KINDS = (".stub", ".ips", ".bps")
 # Upstream Azahar's LayeredFS::LoadExtRelocations looks only at the files at the top of
 # romfs_ext/; the port's Azahar (port/azahar/azahar.patch) reads its sub-folders too, which MH4U's
@@ -111,7 +113,7 @@ ZIP_MAX_ENTRIES = 200_000
 ZIP_MAX_FILE = 4 << 30
 ZIP_MAX_TOTAL = 8 << 30
 
-KINDS = ("romfs", "romfs_ext", "code", "exefs", "exheader")  # what a mod can contain
+KINDS = ("romfs", "romfs_ext", "code", "exefs", "exheader", "recomp")  # what a mod can contain
 TEXT_FIELDS = ("name", "version", "author", "description", "url", "catalog", "region")
 
 _TITLE = re.compile(r"[0-9A-Fa-f]{16}")
@@ -346,6 +348,8 @@ def kind_of(f: ModFile) -> str:
         return "romfs"
     if f.dest.startswith("romfs_ext/"):
         return "romfs_ext"
+    if f.dest == "recomp.json":
+        return "recomp"
     return "exheader" if f.dest == "exheader.bin" else "exefs"
 
 
@@ -498,6 +502,9 @@ def _collect_azahar(mod: Mod, root: str) -> None:
         mod.files.append(ModFile("exheader.bin", top["exheader.bin"], "exheader"))
         mod.warnings.append("exheader.bin replaces the game's exheader, which says how its code is loaded; "
                             "the code library is built with the dump's own")
+    if "recomp.json" in top:
+        # its map of the code it adds, which the code library is built with (tools/build_game.py)
+        mod.files.append(ModFile("recomp.json", top["recomp.json"], "recomp"))
 
 
 def _collect_romfs(mod: Mod, root: str) -> None:
@@ -694,7 +701,11 @@ def patch_writes(data: bytes) -> list[tuple[int, int]] | None:
 
 
 def _code_kind(path: str) -> str:
-    low = path.lower()
+    low = path.lower().replace("\\", "/")
+    if low.endswith("recomp.json"):
+        return "recomp"  # a code mod's map of its own code (Heavenfall's), see code_mods.RecompManifest
+    if "/romfs/" in low and not low.endswith((".ips", ".bps")):
+        return "pack"    # code it loads at run time, which that map names
     return "code.bin" if low.endswith("code.bin") else "bps" if low.endswith(".bps") else "ips"
 
 
@@ -778,7 +789,21 @@ def code_inputs(user_dir: str) -> list[str]:
     luma = os.path.join(user_dir, "sdmc", "luma", "titles", f"{UPDATE_ID:016X}", "code.ips")
     if patch is None and os.path.isfile(luma):
         patch = luma
-    return [p for p in (replacement, patch) if p]
+    inputs = [p for p in (replacement, patch) if p]
+    # a code mod's map of the code it adds past the game's memory, and the files of that code
+    # (tools/build_game.py recompiles them with the game's)
+    manifest = code_mods.find_recomp_manifest(user_dir, PROGRAM_ID) if replacement else None
+    if manifest:
+        inputs.append(manifest)
+        try:
+            with open(manifest, encoding="utf-8") as f:
+                packs = json.load(f).get("packs", [])
+            base = os.path.dirname(manifest)
+            inputs += [os.path.join(base, *str(p["file"]).replace("\\", "/").split("/")) for p in packs
+                       if os.path.isfile(os.path.join(base, *str(p["file"]).replace("\\", "/").split("/")))]
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            pass
+    return inputs
 
 
 def code_fingerprint(paths: list[str]) -> str:
@@ -1019,6 +1044,8 @@ def target_of(rel: str) -> str | None:
         return "code"
     if name in SECTIONS:
         return "exefs:" + name
+    if low == "recomp.json":
+        return "recomp"
     return "exheader" if low == "exheader.bin" else None
 
 
@@ -2719,7 +2746,7 @@ def _plural(n: int, word: str) -> str:
 def _describe(m: dict) -> str:
     what = []
     for kind, label in (("romfs", "game files"), ("romfs_ext", "file patches"), ("exefs", "ExeFS files"),
-                        ("exheader", "exheader")):
+                        ("exheader", "exheader"), ("recomp", "its code map for the port")):
         if kind in m["contains"]:
             what.append(label)
     if m["code"]:

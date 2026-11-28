@@ -128,6 +128,73 @@ def find_mods(user_dir: str, program_id: int) -> tuple[str | None, str | None]:
     return replacement, patch
 
 
+class RecompManifest:
+    """A code mod's own map of the code it adds past the game's memory, for recompilers
+    (`recomp.json` beside its exheader.bin, as Heavenfall writes it with --port):
+
+        {"format": 1 or 2, "title": "0004000000126300", "version": "usa_update",
+         "code_sha1": "<sha1 of exefs/code.bin>",
+         "code": [["0x111e000", "0x1200000"]], "entries": [["0x111e000", "arm"], ...],
+         "packs": [{"file": "romfs/packs/town.bin", "address": "0xc700000", "sha1": "...",
+                    "entries": [["0xc700000", "thumb"], ...]}, ...]}   (format 2 only)
+
+    `code`: ranges of the mod's code.bin past the game's memory that hold code; `packs`: files
+    of its RomFS the game loads at a fixed address while a scene runs (the same bytes each
+    time), code too. `entries`: where that code is entered (calls inside it are followed)."""
+
+    def __init__(self, path: str, ranges: list[tuple[int, int]], entries: dict[int, str],
+                 segments: list[tuple[int, bytes]], pack_files: list[str]):
+        self.path, self.ranges, self.entries = path, ranges, entries
+        self.segments, self.pack_files = segments, pack_files
+
+
+def find_recomp_manifest(user_dir: str, program_id: int) -> str | None:
+    """The recomp.json of this title's mod folder, or None."""
+    path = os.path.join(mod_dir(user_dir, program_id), "recomp.json")
+    return path if os.path.isfile(path) else None
+
+
+def load_recomp_manifest(path: str, code: bytes, program_id: int) -> RecompManifest:
+    """The manifest at `path`, checked against the code it was made for (`code`, the mods
+    applied) and the title; its packs read from the mod's folder and checked too."""
+    import hashlib
+    import json
+    base = os.path.dirname(path)
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    if data.get("format") not in (1, 2):
+        raise ModError(f"{path}: a recomp.json of format {data.get('format')!r}, which this port doesn't know")
+    title = int(str(data.get("title", "0")), 16)
+    base_id = program_id & ~0x0000000E_00000000 if program_id & 0x000000FF_00000000 == 0x0000000E_00000000 \
+        else program_id
+    if title and title != base_id:
+        raise ModError(f"{path}: made for title {title:016X}, not this game ({base_id:016X})")
+    if data.get("code_sha1") and hashlib.sha1(code).hexdigest() != data["code_sha1"]:
+        raise ModError(f"{path}: made for another code.bin than the mod's (its code_sha1 differs): build the mod "
+                       "again, or remove the old recomp.json")
+
+    def mode(m: str) -> str:
+        if m not in ("arm", "thumb"):
+            raise ModError(f"{path}: an entry's instruction set is {m!r}, not arm or thumb")
+        return m
+
+    ranges = [(int(s, 16), int(e, 16)) for s, e in data.get("code", [])]
+    entries = {int(a, 16) & ~1: mode(m) for a, m in data.get("entries", [])}
+    segments, files = [], []
+    for pack in data.get("packs", []) if data["format"] == 2 else []:
+        file = os.path.join(base, *pack["file"].replace("\\", "/").split("/"))
+        if not os.path.isfile(file):
+            raise ModError(f"{path}: its pack {pack['file']} isn't in the mod's folder")
+        with open(file, "rb") as f:
+            image = f.read()
+        if pack.get("sha1") and hashlib.sha1(image).hexdigest() != pack["sha1"]:
+            raise ModError(f"{path}: its pack {pack['file']} isn't the one it was made with (sha1 differs)")
+        segments.append((int(pack["address"], 16), image))
+        entries.update({int(a, 16) & ~1: mode(m) for a, m in pack.get("entries", [])})
+        files.append(file)
+    return RecompManifest(path, ranges, entries, segments, files)
+
+
 def apply_mods(code: bytes, user_dir: str, program_id: int) -> tuple[bytes, list[str]]:
     """The code as Azahar will run it with this user folder's mods, and the files used."""
     replacement, patch = find_mods(user_dir, program_id)

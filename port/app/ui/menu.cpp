@@ -53,8 +53,8 @@ const std::map<std::string, std::string> GAME_DEFAULTS = {
     {"depth_of_field", "on"},
     {"motion_blur", "on"},  {"radial_blur", "on"}, {"haze", "on"},        {"net_sync", "on"},
     {"target_overlay", "on"}, {"skip", "ZR"}, {"text_skip", "A"}, {"result_skip", "ZR"}, {"skip_hint", "on"}, {"skip_end", "ZL+ZR"},
-    {"skip_end_hold", "1.0"}};
-const std::set<std::string> GAME_LIVE = {"fps",           "refresh_rate", "fov", "hud_edges", "touch_overlay",
+    {"skip_end_hold", "1.0"}, {"touch_big", "75"}};
+const std::set<std::string> GAME_LIVE = {"fps",           "refresh_rate", "fov", "hud_edges", "touch_overlay", "touch_big",
                                          "quest_overlay", "target_overlay", "kick",    "target",
                                          "skip",          "skip_hint",    "text_skip", "result_skip", "gather_speed",    "skip_end", "skip_end_hold",
                                          "dither",

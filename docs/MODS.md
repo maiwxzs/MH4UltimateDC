@@ -150,6 +150,14 @@ The port runs the game's code recompiled for your PC (the code library, [PLAYING
 
 The record is `recomp/<program id>.build.json` next to the library (`0004000000126300.build.json` for the USA game, `0004000000126100.build.json` for the European one), written by `build_game.py --install` (with `code_size`, how much of the code segment it recompiled). `status` also notices Luma's code patch (`sdmc/luma/titles/<update id>/code.ips`: `0004000E00126300` for the USA game, `0004000E00126100` for the European one), which Azahar applies when the mods folder has none but `build_game.py` doesn't: move it into a mod instead.
 
+
+### A code mod that adds code past the game's memory (recomp.json)
+
+A code mod can put new code past the game's memory, in an extension its own `exheader.bin` declares, and in files of its RomFS that it loads at a fixed address while a scene runs ("packs"). Recompiled from the game's code alone, that code isn't in the library (the port runs it in Azahar's interpreter, slowly, when it gets there). Such a mod says where its code is in a `recomp.json` beside its `exheader.bin` (Heavenfall Beta writes it with `--port`): format 1 lists the extension's ranges and the addresses its code is entered at; format 2 adds its packs (each file, the address it is loaded at, its SHA-1 and entries). `tools/build_game.py` reads it from the mods folder, checks it against the mod's `code.bin` (`code_sha1`), the title and each pack's SHA-1, and recompiles that code with the game's (tools/code_mods.py, `RecompManifest`). The mod manager deploys `recomp.json` with the mod's other files, and the code library's state counts it and the packs among the code's inputs.
+
+### Heavenfall
+
+The launcher's **Heavenfall** screen makes [Heavenfall Beta](https://github.com/popzol/4u-heavenfall-mod-beta) (popzol and BlitzWOLF, GPL-3.0) from your own game for the port, with the parts you choose: one screen (the touch screen's menus on the top screen), lock-on with L + up, the HUD's size, damage numbers, its comforts, Layered Gear and the rest. `tools/heavenfall.py install --rom GAME --update UPDATE` downloads Heavenfall's source at the version the port is made for (once), installs the packages its command line needs (zstandard, numpy) beside it, runs it with `--port` and your choices (kept in `mh4u-heavenfall/settings.json` of Azahar's user folder; `--set key=value` changes them), and adds the result to the mod library as *Heavenfall*; then build the code library again (the launcher does). Heavenfall's cheats stay off: the port does the frame rate, the field of view and the picture itself. `remove` takes it out. It needs Python 3.12 or newer.
 ## For mod authors
 
 The simplest mod to install is a zip of Azahar's layout with a `mod.json` next to it:

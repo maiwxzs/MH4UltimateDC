@@ -367,6 +367,7 @@ def main(argv=None) -> int:
 
     mods_dir = None if args.no_mods else (args.mods or args.install)
     used, changes_code = [], False
+    manifest = None
     if mods_dir:
         modded, used = code_mods.apply_mods(code, mods_dir, program_id)
         if used:
@@ -384,6 +385,18 @@ def main(argv=None) -> int:
                 print("  the mod changes the game's code: this library runs only with the same mod in "
                       "Azahar's mods folder (build again after adding, changing or removing it)")
             code = modded
+        # code the mod adds past the game's memory, as its own recomp.json maps it (Heavenfall)
+        manifest_path = code_mods.find_recomp_manifest(mods_dir, program_id) if used else None
+        if manifest_path:
+            try:
+                manifest = code_mods.load_recomp_manifest(manifest_path, code, program_id)
+            except code_mods.ModError as e:
+                raise SystemExit(str(e))
+            used.append(manifest_path)
+            used.extend(manifest.pack_files)
+            print(f"  {os.path.basename(manifest_path)}: {len(manifest.ranges)} range(s) of the mod's own code, "
+                  f"{len(manifest.segments)} pack(s), {len(manifest.entries)} entry points")
+            changes_code = True
 
     out = os.path.join(args.out, "recomp")
     print("recompiling (a couple of minutes)")
@@ -391,10 +404,15 @@ def main(argv=None) -> int:
     if size != header.text.size:
         print(f"  the code mod puts new code after the game's own: recompiling 0x{size:X} bytes "
               f"(to the end of the code's last page) instead of 0x{header.text.size:X}")
-    img = Image(code, header.text.address, size)
+    img = Image(code, header.text.address, size,
+                code_ranges=manifest.ranges if manifest else None,
+                segments=manifest.segments if manifest else None)
     entries, hooks, tunables = translate_tables(
         version or {}, recompile.load_entries(args.functions, [args.extra] if args.extra else []),
         recompile.load_hooks(args.hooks), recompile.load_tunables(args.tunables))
+    if manifest:
+        # the mod's own entry points are this version's addresses already (it was built for it)
+        entries = {**entries, **{a: m for a, m in manifest.entries.items() if a not in entries}}
     segs = [(header.ro.address, header.ro.size), (header.data.address, header.data.size)]
     res = recompile.recompile(img, entries, out, data_segments=segs, title_id=program_id,
                               hooks=hooks, tunables=tunables, log=lambda m: print(m, flush=True))
