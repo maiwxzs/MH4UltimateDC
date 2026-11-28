@@ -311,7 +311,7 @@ void Set(Options& o, const std::string& key, const std::string& value) {
     } else if (key == "gather_speed") {
         float f = IsOff(value) ? 1.0f : std::strtof(value.c_str(), nullptr);
         f = f > 5.0f ? f / 100.0f : f;
-        o.gather_speed = f > 0.0f ? std::clamp(f, 1.0f, 2.5f) : 1.0f;  // faster breaks the motions
+        o.gather_speed = f > 0.0f ? std::clamp(f, 1.0f, 2.0f) : 1.0f;  // faster breaks the motions
     } else if (key == "trace_actions") {
         o.trace_actions = IsOn(value);
     } else if (key == "trace_layout") {
@@ -1073,9 +1073,46 @@ void SetMotionSpeed(RCtx* ctx, RFunc original) {
     original(ctx);
 }
 
+// The gathering actions whose item comes from the action's own count of frames, not from its
+// motion: hastening only the motion ended them before the count did, and no item came (crouched
+// gathering, catching bugs, mining: the player's test). Their hunter's update runs gather_speed
+// times a frame, so the count keeps up with the motion.
+constexpr u8 GATHER_COUNTED_ACTIONS[] = {78, 81, 82, 84};
+std::unordered_map<u32, float> gather_extra;  // char -> the share of an extra update owed
+
+bool GatherCounted(RCtx* ctx, u32 chr) {
+    const u32 base = rd32(ctx, chr + CHAR_BASE_WORK);
+    if (base == 0) {
+        return false;
+    }
+    const u8 act_no = rd8(ctx, base + BASE_ACT_NO);
+    return std::find(std::begin(GATHER_COUNTED_ACTIONS), std::end(GATHER_COUNTED_ACTIONS), act_no) !=
+           std::end(GATHER_COUNTED_ACTIONS);
+}
+
 void CharMove(RCtx* ctx, RFunc original) {
     const u32 chr = ctx->r[0];
+    const bool hasten = options.gather_speed > 1.001f && chr != 0 && IsHunter(ctx, chr);
+    // the registers the update was called with, for its extra runs
+    u32 args[4] = {ctx->r[0], ctx->r[1], ctx->r[2], ctx->r[3]};
+    const u32 lr = ctx->r[14], r12 = ctx->r[12], expect_next = ctx->expect_next;
     original(ctx);
+    if (hasten && GatherCounted(ctx, chr)) {
+        float& owed = gather_extra[chr];
+        owed += options.gather_speed - 1.0f;
+        while (owed >= 1.0f && GatherCounted(ctx, chr)) {
+            owed -= 1.0f;
+            const u32 pc = ctx->r[15];
+            std::copy(std::begin(args), std::end(args), ctx->r);
+            ctx->r[12] = r12;
+            ctx->r[14] = lr;
+            ctx->expect_next = expect_next;
+            original(ctx);
+            ctx->r[15] = pc;
+        }
+    } else if (hasten) {
+        gather_extra.erase(chr);
+    }
     if (!options.trace_actions || chr == 0 || !IsHunter(ctx, chr)) {
         return;
     }
