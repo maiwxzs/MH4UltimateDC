@@ -2103,3 +2103,31 @@ index 0000000..cf5c933
 +void SetPresentOverlay(PresentOverlay overlay);
 +
 +} // namespace Vulkan
+diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+index c502a7b..0ce8f80 100644
+--- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
++++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+@@ -41,6 +41,7 @@ void Swapchain::Create(u32 width_, u32 height_, vk::SurfaceKHR surface_, bool lo
+     if (needs_recreation) {
+         return;
+     }
++    LOG_INFO(Render_Vulkan, "present mode: {}", vk::to_string(present_mode)); // MH4U port
+ 
+     SetSurfaceProperties();
+     if (needs_recreation) {
+@@ -205,6 +206,15 @@ void Swapchain::SetPresentMode() {
+         return;
+     }
+ 
++    // MH4U port: with vsync, mailbox whenever the driver has it. Fifo would hold the game to the
++    // monitor's refresh: the emulation thread waits there for a free swapchain image (the port
++    // runs the game at up to 180 Hz). Mailbox shows the newest finished frame at each refresh,
++    // without tearing, and never makes the game wait.
++    if (use_vsync && has_mailbox) {
++        present_mode = vk::PresentModeKHR::eMailbox;
++        return;
++    }
++
+     const auto frame_limit = Settings::GetFrameLimit();
+ 
+     // If vsync is enabled attempt to use mailbox mode in case the user wants to speedup/slowdown

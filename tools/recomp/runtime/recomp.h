@@ -433,15 +433,31 @@ RC_INLINE void rc_set_cpsr(RCtx *ctx, u32 v, u32 mask) {
 #define RC_HW_FTZ 1
 #endif
 RC_INLINE void rc_apply_fpscr(u32 fpscr) {
+#if (defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)) && defined(__GNUC__)
+    /* Straight to the two control registers, as fesetround does but without its library call
+     * (it showed in profiles at every system call): MXCSR's rounding field (bits 14:13) and
+     * FTZ+DAZ, and the x87 control word's (bits 11:10, for libm's x87 nearbyint/rint), both
+     * coded nearest, down, up, towards zero; each written only when it changes. */
+    static const u32 rc_mxcsr_rmode[4] = {0x0000u, 0x4000u, 0x2000u, 0x6000u}; /* RN RP RM RZ */
+    const u32 old_csr = _mm_getcsr();
+    const u32 csr = (old_csr & ~0xE040u) | rc_mxcsr_rmode[(fpscr >> 22) & 3] |
+                    ((fpscr & 0x01000000u) ? 0x8040u : 0);
+    if (csr != old_csr) _mm_setcsr(csr);
+    unsigned short cw;
+    __asm__ volatile("fnstcw %0" : "=m"(cw));
+    const unsigned short new_cw = (unsigned short)((cw & ~0x0C00u) | ((csr >> 3) & 0x0C00u));
+    if (new_cw != cw) __asm__ volatile("fldcw %0" : : "m"(new_cw));
+#else
     static const int modes[4] = {FE_TONEAREST, FE_UPWARD, FE_DOWNWARD, FE_TOWARDZERO};
     fesetround(modes[(fpscr >> 22) & 3]);
-#if defined(__SSE2__) || defined(_M_X64) || defined(_M_AMD64)
+#if defined(__SSE2__)
     _mm_setcsr((_mm_getcsr() & ~0x8040u) | ((fpscr & 0x01000000u) ? 0x8040u : 0));
 #elif defined(__aarch64__)
     unsigned long fpcr;
     __asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
     fpcr = (fpcr & ~(1ul << 24)) | ((fpscr & 0x01000000u) ? (1ul << 24) : 0);
     __asm__ volatile("msr fpcr, %0" : : "r"(fpcr));
+#endif
 #endif
 }
 #define rc_apply_rounding rc_apply_fpscr
