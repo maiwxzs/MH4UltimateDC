@@ -317,6 +317,9 @@ def main(argv=None) -> int:
     ap.add_argument("--dump", required=True, help="decrypted .cia / .3ds / .cci / .cxi of your own copy")
     ap.add_argument("--out", default=os.path.join(ROOT, "build", "game"))
     ap.add_argument("--opt", default="O2", help="O0 builds fast, O1/O2 run faster (O2: the default)")
+    ap.add_argument("--paged", action="store_true",
+                    help="reach guest memory through Azahar's page table (the default except on Windows, "
+                         "where the library reaches it directly: fastmem)")
     ap.add_argument("--march", default="native",
                     help="the CPU to compile for (clang's -march): native, this computer's, by default; "
                          "'none' for any x86-64 (a library to copy to another computer)")
@@ -438,7 +441,11 @@ def main(argv=None) -> int:
     # the library is built on the computer that runs it: compiled for its own CPU (AVX2 and the
     # like where it has them), the game's code runs faster
     cpu = [] if args.android or args.march in ("", "none") else [f"-march={args.march}"]
-    lib = rbuild.build(out, args.jobs, args.opt, ["RC_PAGED"], os.path.join("android", name) if args.android else name,
+    # on Windows the port maps the game's address space as one block (port/src/fastmem.cpp), so the
+    # code reaches guest memory with no page-table look-up at each access
+    memory_mode = ["RC_PAGED"] if args.android or args.paged or not sys.platform.startswith("win") else ["RC_FASTMEM"]
+    print(f"guest memory: {'the page table' if memory_mode == ['RC_PAGED'] else 'direct (fastmem)'}")
+    lib = rbuild.build(out, args.jobs, args.opt, memory_mode, os.path.join("android", name) if args.android else name,
                        [rbuild.DLL_GLUE], cc=cc, extra_flags=["-fvisibility=hidden", *cpu], android=args.android)
     print(f"code library: {lib}")
     if args.android and not args.install:

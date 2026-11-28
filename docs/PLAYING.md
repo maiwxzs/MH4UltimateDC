@@ -35,7 +35,7 @@ python3 tools/build_game.py --dump "path/to/MH4U v1.3.0 update.cia" --install --
 python3 tools/build_game.py --dump "path/to/MH4U v1.3.0 update.cia" --install
 ```
 
-It checks that the update is v1.3.0, recompiles its code (a couple of minutes), compiles it (several minutes; `-j N` sets the number of parallel jobs) and installs `recomp/0004000000126300.dll` (`.so` on Linux, `.dylib` on macOS) into Azahar's user folder (`%APPDATA%\Azahar` on Windows, `~/.local/share/azahar-emu` on Linux, `~/Library/Application Support/Azahar` on macOS; give another folder after `--install` for a portable setup). Everything it writes under `build/` contains game code: keep it to yourself.
+It checks that the update is v1.3.0, recompiles its code (a couple of minutes), compiles it (several minutes; `-j N` sets the number of parallel jobs) and installs `recomp/0004000000126300.dll` (`.so` on Linux, `.dylib` on macOS) into Azahar's user folder (`%APPDATA%\Azahar` on Windows, `~/.local/share/azahar-emu` on Linux, `~/Library/Application Support/Azahar` on macOS; give another folder after `--install` for a portable setup). Everything it writes under `build/` contains game code: keep it to yourself. The library is compiled with `-O2` for the computer's own processor (`--march none` for one to copy to another computer). On Windows it reaches the game's memory directly (*fastmem*: the app maps the game's whole address space as one block, Windows 10 version 1803 or newer); `--paged` builds one that goes through Azahar's page table instead, as on the other systems.
 
 ## 2. Set up Azahar
 

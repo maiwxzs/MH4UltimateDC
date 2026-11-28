@@ -1625,10 +1625,67 @@ index 1d66da3..0a0f608 100644
      eapol_logoff.max_nodes = max_nodes;
  
 diff --git a/src/core/memory.cpp b/src/core/memory.cpp
-index c1dbbd0..49745de 100644
+index c1dbbd0..f0a0274 100644
 --- a/src/core/memory.cpp
 +++ b/src/core/memory.cpp
-@@ -892,11 +892,11 @@ std::string MemorySystem::ReadCString(VAddr vaddr, std::size_t max_length) {
+@@ -44,10 +44,20 @@ constexpr u32 SIGSEGV = 11;
+ 
+ namespace Memory {
+ 
++// MH4U port: see SetRamAllocator
++static RamAllocator ram_allocator{};
++
++void SetRamAllocator(RamAllocator allocator) {
++    ram_allocator = allocator;
++}
++
+ void PageTable::Clear() {
+     pointers.raw.fill(nullptr);
+     pointers.refs.fill(MemoryRef());
+     attributes.fill(PageType::Unmapped);
++    if (Pointers::on_change) {
++        Pointers::on_change(&pointers, PAGE_TABLE_NUM_ENTRIES, nullptr); // MH4U port
++    }
+ }
+ 
+ class RasterizerCacheMarker {
+@@ -102,10 +112,31 @@ class MemorySystem::Impl {
+ public:
+     // Visual Studio would try to allocate these on compile time
+     // if they are std::array which would exceed the memory limit.
+-    std::unique_ptr<u8[]> fcram = std::make_unique<u8[]>(Memory::FCRAM_N3DS_SIZE);
+-    std::unique_ptr<u8[]> vram = std::make_unique<u8[]>(Memory::VRAM_SIZE);
+-    std::unique_ptr<u8[]> n3ds_extra_ram = std::make_unique<u8[]>(Memory::N3DS_EXTRA_RAM_SIZE);
+-    std::unique_ptr<u8[]> dsp_ram = std::make_unique<u8[]>(Memory::DSP_RAM_SIZE);
++    // MH4U port: the four in one block, from the frontend's allocator when it set one
++    // (SetRamAllocator); `get()` as the std::unique_ptr<u8[]> they were
++    struct RamBlock {
++        RamAllocator allocator = ram_allocator;
++        u8* block = allocator.allocate ? allocator.allocate(RAM_BLOCK_SIZE) : nullptr;
++        std::unique_ptr<u8[]> fallback =
++            block ? std::unique_ptr<u8[]>{} : std::make_unique<u8[]>(RAM_BLOCK_SIZE);
++        u8* base = block ? block : fallback.get();
++        ~RamBlock() {
++            if (block && allocator.release) {
++                allocator.release(block, RAM_BLOCK_SIZE);
++            }
++        }
++    };
++    struct RamSpan {
++        u8* pointer;
++        u8* get() const {
++            return pointer;
++        }
++    };
++    RamBlock ram;
++    RamSpan fcram{ram.base};
++    RamSpan vram{ram.base + Memory::FCRAM_N3DS_SIZE};
++    RamSpan n3ds_extra_ram{vram.pointer + Memory::VRAM_SIZE};
++    RamSpan dsp_ram{n3ds_extra_ram.pointer + Memory::N3DS_EXTRA_RAM_SIZE};
+ 
+     Core::System& system;
+     std::shared_ptr<PageTable> current_page_table = nullptr;
+@@ -892,11 +923,11 @@ std::string MemorySystem::ReadCString(VAddr vaddr, std::size_t max_length) {
  }
  
  MemorySystem::PhysMemRegionInfo MemorySystem::GetPhysMemRegionInfo(PAddr address) {
@@ -1645,7 +1702,7 @@ index c1dbbd0..49745de 100644
      constexpr std::array memory_areas = {
          std::make_pair(VRAM_PADDR, VRAM_SIZE),
          std::make_pair(DSP_RAM_PADDR, DSP_RAM_SIZE),
-@@ -913,28 +913,27 @@ MemorySystem::PhysMemRegionInfo MemorySystem::GetPhysMemRegionInfo(PAddr address
+@@ -913,28 +944,27 @@ MemorySystem::PhysMemRegionInfo MemorySystem::GetPhysMemRegionInfo(PAddr address
      if (area == memory_areas.end()) [[unlikely]] {
          LOG_ERROR(HW_Memory, "Unknown GetPhysMemRegionInfo @ {:#08X} at PC {:#08X}", address,
                    impl->GetPC());
@@ -1680,6 +1737,61 @@ index c1dbbd0..49745de 100644
  }
  
  u8* MemorySystem::GetPhysicalPointer(PAddr address) {
+diff --git a/src/core/memory.h b/src/core/memory.h
+index d490734..b1ba4f5 100644
+--- a/src/core/memory.h
++++ b/src/core/memory.h
+@@ -74,6 +74,9 @@ struct PageTable {
+             Entry& operator=(MemoryRef value) {
+                 pointers.raw[idx] = value.GetPtr();
+                 pointers.refs[idx] = std::move(value);
++                if (on_change) [[unlikely]] {
++                    on_change(&pointers, idx, pointers.raw[idx]); // MH4U port
++                }
+                 return *this;
+             }
+ 
+@@ -94,6 +97,12 @@ struct PageTable {
+             return refs[idx];
+         }
+ 
++        /// MH4U port: told of every change to a page's pointer (idx, the new pointer), and of a
++        /// change to all of them (idx PAGE_TABLE_NUM_ENTRIES), for a copy of the address space
++        /// kept elsewhere (the port's fastmem). None by default.
++        using ChangeCallback = void (*)(const Pointers* pointers, std::size_t idx, u8* pointer);
++        inline static ChangeCallback on_change = nullptr;
++
+     private:
+         std::array<u8*, PAGE_TABLE_NUM_ENTRIES> raw;
+         std::array<MemoryRef, PAGE_TABLE_NUM_ENTRIES> refs;
+@@ -139,6 +148,9 @@ private:
+         for (std::size_t i = 0; i < PAGE_TABLE_NUM_ENTRIES; i++) {
+             pointers.raw[i] = pointers.refs[i].GetPtr();
+         }
++        if (Pointers::on_change) {
++            Pointers::on_change(&pointers, PAGE_TABLE_NUM_ENTRIES, nullptr); // MH4U port
++        }
+     }
+     friend class boost::serialization::access;
+ };
+@@ -264,6 +276,17 @@ enum class FlushMode {
+     FlushAndInvalidate,
+ };
+ 
++/// MH4U port: the frontend can give the emulated RAM (FCRAM, VRAM, the New 3DS's extra RAM and
++/// DSP RAM, in that order, in one block of RAM_BLOCK_SIZE bytes, zeroed) a home of its own: the
++/// port's fastmem maps the same memory a second time, as the game's address space. Without an
++/// allocator (the default), each is an ordinary allocation.
++constexpr std::size_t RAM_BLOCK_SIZE = FCRAM_N3DS_SIZE + VRAM_SIZE + N3DS_EXTRA_RAM_SIZE + DSP_RAM_SIZE;
++struct RamAllocator {
++    u8* (*allocate)(std::size_t size) = nullptr;   ///< nullptr: it couldn't
++    void (*release)(u8* block, std::size_t size) = nullptr;
++};
++void SetRamAllocator(RamAllocator allocator);
++
+ class MemorySystem {
+ public:
+     explicit MemorySystem(Core::System& system);
 diff --git a/src/core/savestate.cpp b/src/core/savestate.cpp
 index e065efd..66a3a28 100644
 --- a/src/core/savestate.cpp

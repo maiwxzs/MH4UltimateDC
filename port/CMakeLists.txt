@@ -19,6 +19,8 @@ set(MH4U_RUNTIME_DIR "${MH4U_TOOLS_DIR}/recomp/runtime")
 add_library(mh4u_backend STATIC
     src/arm_recomp.cpp
     src/arm_recomp.h
+    src/fastmem.cpp
+    src/fastmem.h
     src/fiber.cpp
     src/fiber.h
     src/frontend.cpp

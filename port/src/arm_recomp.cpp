@@ -19,6 +19,7 @@
 #include "core/hle/kernel/client_session.h"
 #include "core/hle/kernel/process.h"
 #include "core/memory.h"
+#include "fastmem.h"
 #include "fiber.h"
 #include "hooks.h"
 #include "profiler.h"
@@ -85,6 +86,13 @@ void PerfReport(PerfClock::time_point now, float seconds) {
         line += fmt::format("{}{} {:.1f}%", i ? ", " : "", top[i].second, pct(top[i].first));
     }
     LOG_INFO(Core_ARM11, "perf: the system calls' time: {}", line);
+    if (Fastmem::Enabled()) {
+        const auto fm = Fastmem::TakeStats();
+        LOG_INFO(Core_ARM11,
+                 "perf: fastmem: {} slow accesses ({} to the GPU's cached pages, {} to other memory, {} "
+                 "unmapped), {} pages mapped, {} unmapped",
+                 fm.faults, fm.cached, fm.other_memory, fm.unmapped, fm.maps, fm.unmaps);
+    }
     (void)seconds;
     perf = PerfWindow{};
     perf.start = now;
@@ -110,6 +118,10 @@ std::unique_ptr<Common::DynamicLibrary> g_library;
 /// rc_call_counts() of a diagnostic code library (-DRC_CALL_COUNTS), or null.
 using RCallCounts = u32 (*)(u32* out, u32 max);
 RCallCounts g_call_counts = nullptr;
+/// rc_build_mode of a library built for fastmem (RC_FASTMEM: flat memory, fastmem.h).
+constexpr u32 RC_BUILD_FASTMEM = 3;
+/// The loaded library reaches guest memory at ctx->mem + address (fastmem), not via the page table.
+bool g_fastmem = false;
 
 const std::unordered_map<u32, RFunc>& Functions() {
     return g_functions;
@@ -215,8 +227,11 @@ bool ARM_Recomp::LoadCode(const std::string& path, std::string& error) {
     }
     // A library built by the native branch's tools for its own runtime (RC_NATIVE: flat memory, a
     // preemption flag instead of cycle charging) can't run on Azahar's page table. Those tools'
-    // libraries export rc_build_mode (0 for RC_PAGED); main's export none and are all RC_PAGED.
-    if (const auto* mode = library->GetSymbol<const u32*>("rc_build_mode"); mode && *mode != 0) {
+    // libraries export rc_build_mode (0 for RC_PAGED); main's export none and are RC_PAGED, or
+    // export 3 (RC_FASTMEM: flat memory, fastmem.h).
+    const auto* mode = library->GetSymbol<const u32*>("rc_build_mode");
+    const bool fastmem = mode && *mode == RC_BUILD_FASTMEM;
+    if (mode && *mode != 0 && !fastmem) {
         error = fmt::format("{} was built for the native runtime (rc_build_mode {}: {}); "
                             "build the library for Azahar without --native",
                             path, *mode, *mode == 2 ? "RC_NATIVE_DETERMINISTIC" : "RC_NATIVE");
@@ -240,6 +255,18 @@ bool ARM_Recomp::LoadCode(const std::string& path, std::string& error) {
 #endif
         return false;
     }
+    if (fastmem) {
+        std::string why;
+        if (!Fastmem::Enable(why)) {
+            error = fmt::format("{} reaches memory directly (fastmem), but {}: build it again with "
+                                "build_game.py --paged",
+                                path, why);
+            return false;
+        }
+    } else {
+        Fastmem::Disable();
+    }
+    g_fastmem = fastmem;
     g_call_counts = library->GetSymbol<RCallCounts>("rc_call_counts");
     g_library = std::move(library);
     SetCode(info);
@@ -524,6 +551,14 @@ void ARM_Recomp::PrepareReschedule() {
 void ARM_Recomp::SetPageTable(const std::shared_ptr<Memory::PageTable>& page_table_) {
     page_table = page_table_;
     ctx->pages = page_table ? page_table->GetPointerArray().data() : nullptr;
+    if (g_fastmem) {
+        // the hooks keep using the page table (RC_PAGED in hooks.cpp); the code, the flat block
+        ctx->mem = page_table ? Fastmem::Bind(page_table, memory) : nullptr;
+        if (page_table && !ctx->mem) {
+            LOG_CRITICAL(Core_ARM11, "fastmem: the game's memory can't be mapped; the code library "
+                                     "needs building again with build_game.py --paged");
+        }
+    }
 }
 
 std::shared_ptr<Memory::PageTable> ARM_Recomp::GetPageTable() const {

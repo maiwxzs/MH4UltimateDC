@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .insn import (AL, B, BL, ICALL, IJUMP, JTAB, OP, RET, SVC, TRAP, Insn, Unpredictable,
+from .insn import (block_load, block_store, AL, B, BL, ICALL, IJUMP, JTAB, OP, RET, SVC, TRAP, Insn, Unpredictable,
                    Unsupported, hexc, ror32, sext)
 
 TRAP_UNDEF, TRAP_UNSUPPORTED, TRAP_BKPT = 1, 2, 3
@@ -539,12 +539,12 @@ class ArmTranslator:
             if wback:
                 body.append(f"R({rn}) = oa;")
         elif sh == 2:
-            body.append(f"u32 v0 = rd32(ctx, {a}), v1 = rd32(ctx, {a} + 4);")
+            body += block_load(a, ["u32 v0", "u32 v1"])
             if wback:
                 body.append(f"R({rn}) = oa;")
             body += [f"R({rt}) = v0;", f"R({rt + 1}) = v1;"]
         else:
-            body.append(f"wr32(ctx, {a}, R({rt})); wr32(ctx, {a} + 4, R({rt + 1}));")
+            body += block_store(a, [f"R({rt})", f"R({rt + 1})"])
             if wback:
                 body.append(f"R({rn}) = oa;")
         ins.body = body
@@ -564,21 +564,14 @@ class ArmTranslator:
             raise Unpredictable("STM writeback with Rn not lowest")
         start = {(0, 1): "a", (1, 1): "a + 4", (0, 0): f"a - {4 * n - 4}", (1, 0): f"a - {4 * n}"}[(p, u)]
         body = [f"u32 a = R({rn});", f"u32 s = {start};"]
-        k = 0
         pcv = None
-        for r in range(16):
-            if not regs & (1 << r):
-                continue
-            addr = f"s + {4 * k}" if k else "s"
-            if load:
-                if r == 15:
-                    body.append(f"u32 t_pc = rd32(ctx, {addr});")
-                    pcv = "t_pc"
-                else:
-                    body.append(f"R({r}) = rd32(ctx, {addr});")
-            else:
-                body.append(f"wr32(ctx, {addr}, {self.rr(r, ins.addr + 8)});")
-            k += 1
+        lst = [r for r in range(16) if regs & (1 << r)]
+        if load:
+            if 15 in lst:
+                pcv = "t_pc"
+            body += block_load("s", ["u32 t_pc" if r == 15 else f"R({r})" for r in lst])
+        else:
+            body += block_store("s", [self.rr(r, ins.addr + 8) for r in lst])
         if wb:
             body.append(f"R({rn}) = a {'+' if u else '-'} {4 * n};")
         ins.body = body
@@ -989,9 +982,10 @@ class ArmTranslator:
             if first + imm8 > 32:
                 raise Unpredictable("VLDM/VSTM past s31")
         body = [f"u32 a = R({rn});", f"u32 s = {'a' if u else f'a - {imm8 * 4}'};"]
-        for k, sw in enumerate(words):
-            addr = f"s + {4 * k}" if k else "s"
-            body.append(f"ctx->f.sw[{sw}] = rd32(ctx, {addr});" if load else f"wr32(ctx, {addr}, ctx->f.sw[{sw}]);")
+        if load:
+            body += block_load("s", [f"ctx->f.sw[{sw}]" for sw in words])
+        else:
+            body += block_store("s", [f"ctx->f.sw[{sw}]" for sw in words])
         if wb:
             body.append(f"R({rn}) = a {'+' if u else '-'} {imm8 * 4};")
         ins.body = body

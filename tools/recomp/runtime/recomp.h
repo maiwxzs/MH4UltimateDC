@@ -132,6 +132,11 @@ typedef int (*RCodeInit)(const RHost *host, RCodeInfo *info);
 #else
 #define RC_INLINE static inline __attribute__((always_inline))
 #endif
+#if defined(_MSC_VER)
+#define RC_NOINLINE static __inline __declspec(noinline)
+#else
+#define RC_NOINLINE static inline __attribute__((noinline))
+#endif
 
 #define R(n) (ctx->r[n])
 
@@ -184,17 +189,55 @@ RC_INLINE void wr8(RCtx *ctx, u32 a, u32 v) {
     rc_slow_write(ctx, a, v, 1);
 }
 #else
-/* Flat mode: guest address A lives at ctx->mem + A (4 GiB host reservation). */
-#define MEMP(a) (ctx->mem + (u32)(a))
-RC_INLINE u32 rd32(RCtx *ctx, u32 a) { u32 v; memcpy(&v, MEMP(a), 4); return v; }
-RC_INLINE u32 rd16(RCtx *ctx, u32 a) { u16 v; memcpy(&v, MEMP(a), 2); return v; }
-RC_INLINE u32 rd8(RCtx *ctx, u32 a) { return *MEMP(a); }
-RC_INLINE void wr32(RCtx *ctx, u32 a, u32 v) { memcpy(MEMP(a), &v, 4); }
-RC_INLINE void wr16(RCtx *ctx, u32 a, u32 v) { u16 h = (u16)v; memcpy(MEMP(a), &h, 2); }
-RC_INLINE void wr8(RCtx *ctx, u32 a, u32 v) { *MEMP(a) = (u8)v; }
+/* Flat mode: guest address A lives at ctx->mem + A (4 GiB host reservation). Each function reads
+ * ctx->mem once, into rc_m (RC_ENTRY): it doesn't change while guest code runs, and a store
+ * through a u8 pointer would otherwise make the compiler load it again before the next access. */
+#define RC_MEM_LOCAL u8 *const rc_m = ctx->mem;
+#define MEMP(a) (rc_m + (u32)(a))
+RC_INLINE u32 rc_frd32(u8 *m, u32 a) { u32 v; memcpy(&v, m + a, 4); return v; }
+RC_INLINE u32 rc_frd16(u8 *m, u32 a) { u16 v; memcpy(&v, m + a, 2); return v; }
+RC_INLINE void rc_fwr32(u8 *m, u32 a, u32 v) { memcpy(m + a, &v, 4); }
+RC_INLINE void rc_fwr16(u8 *m, u32 a, u32 v) { u16 h = (u16)v; memcpy(m + a, &h, 2); }
+#define rd32(ctx, a) rc_frd32(rc_m, (u32)(a))
+#define rd16(ctx, a) rc_frd16(rc_m, (u32)(a))
+#define rd8(ctx, a) ((u32)rc_m[(u32)(a)])
+#define wr32(ctx, a, v) rc_fwr32(rc_m, (u32)(a), (v))
+#define wr16(ctx, a, v) rc_fwr16(rc_m, (u32)(a), (v))
+#define wr8(ctx, a, v) ((void)(rc_m[(u32)(a)] = (u8)(v)))
 #endif
+#ifndef RC_MEM_LOCAL
+#define RC_MEM_LOCAL
+#endif
+#ifdef RC_PAGED
 RC_INLINE u32 rds16(RCtx *ctx, u32 a) { return (u32)(s32)(s16)(u16)rd16(ctx, a); }
 RC_INLINE u32 rds8(RCtx *ctx, u32 a) { return (u32)(s32)(s8)(u8)rd8(ctx, a); }
+#else
+#define rds16(ctx, a) ((u32)(s32)(s16)(u16)rd16(ctx, a))
+#define rds8(ctx, a) ((u32)(s32)(s8)(u8)rd8(ctx, a))
+#endif
+
+/* Several consecutive words (LDM/STM, PUSH/POP, LDRD/STRD, VLDM/VSTM): one check that they
+ * all lie in one mapped page, then one copy, instead of a check per word. Otherwise word by
+ * word, in order, through rd32/wr32, as the instructions would have done one at a time. */
+#ifdef RC_PAGED
+RC_NOINLINE void rc_ldm_slow(RCtx *ctx, u32 s, u32 *v, int n) {
+    for (int i = 0; i < n; ++i) v[i] = rd32(ctx, s + 4u * (u32)i);
+}
+RC_NOINLINE void rc_stm_slow(RCtx *ctx, u32 s, const u32 *v, int n) {
+    for (int i = 0; i < n; ++i) wr32(ctx, s + 4u * (u32)i, v[i]);
+}
+RC_INLINE void rc_ldm(RCtx *ctx, u32 s, u32 *v, int n) {
+    if (RC_FAST(s, 4u * (u32)n)) { memcpy(v, RC_PAGE(s) + (s & 0xFFF), 4u * (u32)n); return; }
+    rc_ldm_slow(ctx, s, v, n);
+}
+RC_INLINE void rc_stm(RCtx *ctx, u32 s, const u32 *v, int n) {
+    if (RC_FAST(s, 4u * (u32)n)) { memcpy(RC_PAGE(s) + (s & 0xFFF), v, 4u * (u32)n); return; }
+    rc_stm_slow(ctx, s, v, n);
+}
+#else
+#define rc_ldm(ctx, s, v, n) memcpy((v), MEMP(s), 4u * (u32)(n))
+#define rc_stm(ctx, s, v, n) memcpy(MEMP(s), (v), 4u * (u32)(n))
+#endif
 
 /* ── conditions ────────────────────────────────────────────────────────── */
 /* Where flags live. Generated functions may keep registers and flags in local variables
@@ -636,7 +679,7 @@ RC_INLINE double rc_d2d(u32 fpscr, u64 a) { return u2d(RC_IN64(fpscr, a)); }
  * previous function runs into without a call, that function's own return address. Returns
  * leave their target in r15, so whoever made the outermost call can check where the guest
  * really went (tail calls return through their callee). */
-#define RC_ENTRY() u32 rc_entry_lr = ctx->r[14]; \
+#define RC_ENTRY() RC_MEM_LOCAL u32 rc_entry_lr = ctx->r[14]; \
     if (ctx->expect_next) { rc_entry_lr = ctx->expect_next; ctx->expect_next = 0; }
 #define RC_FALL_EXPECT() (ctx->expect_next = rc_entry_lr)
 

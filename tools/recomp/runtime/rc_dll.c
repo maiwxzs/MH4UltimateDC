@@ -21,6 +21,15 @@ extern const char *const rc_tunable_names[];
 
 static RHost host;
 
+#if defined(RC_FASTMEM)
+/* Flat memory on Azahar (the port's fastmem): guest memory at ctx->mem + address. A host that
+ * doesn't know this mode refuses a library that exports a non-zero mode. */
+#if defined(RC_PAGED)
+#error "RC_FASTMEM is a flat-memory build: no RC_PAGED"
+#endif
+RC_EXPORT const u32 rc_build_mode = 3;
+#endif
+
 /* Function lookup inside the library (open addressing, keys are addr | thumb bit); only
  * targets that aren't recompiled go to the host (which interprets them). */
 typedef struct { u32 key; RFunc fn; } Slot;

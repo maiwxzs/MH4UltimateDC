@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .insn import (AL, B, BL, ICALL, IJUMP, OP, RET, SVC, TRAP, Insn, Unpredictable, Unsupported,
+from .insn import (block_load, block_store, AL, B, BL, ICALL, IJUMP, OP, RET, SVC, TRAP, Insn, Unpredictable, Unsupported,
                    hexc, sext)
 
 TRAP_UNDEF, TRAP_UNSUPPORTED, TRAP_BKPT = 1, 2, 3
@@ -235,20 +235,14 @@ class ThumbTranslator:
             n = len(lst) + extra
             if pop:
                 body = ["u32 a = R(13);"]
-                for k, r in enumerate(lst):
-                    body.append(f"R({r}) = rd32(ctx, a + {4 * k});")
-                if extra:
-                    body.append(f"u32 t_pc = rd32(ctx, a + {4 * len(lst)});")
+                body += block_load("a", [f"R({r})" for r in lst] + (["u32 t_pc"] if extra else []))
                 body.append(f"R(13) = a + {4 * n};")
                 ins.body = body
                 if extra:
                     ins.kind, ins.pcexpr = RET, "t_pc"
             else:
                 body = [f"u32 a = R(13) - {4 * n};"]
-                for k, r in enumerate(lst):
-                    body.append(f"wr32(ctx, a + {4 * k}, R({r}));")
-                if extra:
-                    body.append(f"wr32(ctx, a + {4 * len(lst)}, R(14));")
+                body += block_store("a", [f"R({r})" for r in lst] + (["R(14)"] if extra else []))
                 body.append("R(13) = a;")
                 ins.body = body
             return
@@ -276,14 +270,12 @@ class ThumbTranslator:
             raise Unpredictable("empty LDMIA/STMIA")
         body = [f"u32 a = R({rn});"]
         if load:
-            for k, r in enumerate(lst):
-                body.append(f"R({r}) = rd32(ctx, a + {4 * k});")
+            body += block_load("a", [f"R({r})" for r in lst])
             if rn not in lst:
                 body.append(f"R({rn}) = a + {4 * len(lst)};")
         else:
             if rn in lst and lst[0] != rn:
                 raise Unpredictable("STMIA with base not lowest")
-            for k, r in enumerate(lst):
-                body.append(f"wr32(ctx, a + {4 * k}, R({r}));")
+            body += block_store("a", [f"R({r})" for r in lst])
             body.append(f"R({rn}) = a + {4 * len(lst)};")
         ins.body = body

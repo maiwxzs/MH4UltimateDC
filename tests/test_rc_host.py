@@ -63,13 +63,14 @@ def test_the_host_refuses_rc_native_first_and_passes_no_preempt_flag():
         text = f.read()
     load = text[text.index("bool ARM_Recomp::LoadCode("):]
     load = load[:load.index("\n}\n")]
-    # the if-block of the rc_build_mode lookup, as the native branch has it: a mode other than
-    # RC_PAGED's 0 sets the error and returns false, before rc_code_init is called
-    refusal = re.search(r'\n( *)if \(const auto\* mode = library->GetSymbol<const u32\*>\("rc_build_mode"\); '
-                        r'(.*?)\) \{\n(.*?)\n\1\}\n', load, re.S)
-    assert refusal, "LoadCode has no if-block around the rc_build_mode lookup"
-    condition, body = refusal.group(2), [line.strip() for line in refusal.group(3).splitlines()]
-    assert condition == "mode && *mode != 0"
+    # the rc_build_mode lookup, then its if-block: a mode other than RC_PAGED's 0 and RC_FASTMEM's 3
+    # (the port's fastmem) sets the error and returns false, before rc_code_init is called
+    assert 'const auto* mode = library->GetSymbol<const u32*>("rc_build_mode");' in load
+    assert "const bool fastmem = mode && *mode == RC_BUILD_FASTMEM;" in load
+    assert "constexpr u32 RC_BUILD_FASTMEM = 3;" in text
+    refusal = re.search(r'\n( *)if \((mode && \*mode != 0 && !fastmem)\) \{\n(.*?)\n\1\}\n', load, re.S)
+    assert refusal, "LoadCode has no if-block refusing other rc_build_modes"
+    body = [line.strip() for line in refusal.group(3).splitlines()]
     assert any(line.startswith("error = ") for line in body)
     assert "return false;" in body
     assert refusal.end() < load.index("init(&host, &info)")

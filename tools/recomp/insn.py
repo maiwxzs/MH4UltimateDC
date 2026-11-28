@@ -68,3 +68,20 @@ def ror32(x: int, n: int) -> int:
 def sext(v: int, bits: int) -> int:
     v &= (1 << bits) - 1
     return v - (1 << bits) if v & (1 << (bits - 1)) else v
+
+
+def block_load(base: str, dests: list[str]) -> list[str]:
+    """C lines reading consecutive words from `base` into `dests` (C lvalues, or `u32 name`
+    declarations): rd32 for one word, rc_ldm (one page check, one copy) for several."""
+    if len(dests) == 1:
+        return [f"{dests[0]} = rd32(ctx, {base});"]
+    n = len(dests)
+    return [f"u32 bv[{n}];", f"rc_ldm(ctx, {base}, bv, {n});", *(f"{d} = bv[{k}];" for k, d in enumerate(dests))]
+
+
+def block_store(base: str, values: list[str]) -> list[str]:
+    """C lines writing `values` (C expressions) as consecutive words from `base`: wr32 for one
+    word, rc_stm (one page check, one copy) for several."""
+    if len(values) == 1:
+        return [f"wr32(ctx, {base}, {values[0]});"]
+    return [f"const u32 bv[{len(values)}] = {{{', '.join(values)}}};", f"rc_stm(ctx, {base}, bv, {len(values)});"]
