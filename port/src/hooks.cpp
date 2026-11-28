@@ -1052,31 +1052,10 @@ bool IsHunter(RCtx* ctx, u32 chr) {
 /// model's setMotionSpeed (0x00b065d4: this, s0): only that last one plays the motion, so it is
 /// the one hastened. Only the hunter's motion: the rest of the game runs as ever, and the items
 /// still come from the game's own action at its end.
-u64 gather_traced_at = 0;  // the frame gather_speed last hastened a motion (trace_actions logs a new run)
-
-void SetMotionSpeed(RCtx* ctx, RFunc original) {
-    const u32 chr = ctx->r[0];
-    if (options.gather_speed > 1.001f && chr != 0 && IsHunter(ctx, chr)) {
-        const u32 base = rd32(ctx, chr + CHAR_BASE_WORK);
-        if (base != 0) {
-            const u8 act_no = rd8(ctx, base + BASE_ACT_NO);
-            if (std::find(std::begin(GATHER_ACTIONS), std::end(GATHER_ACTIONS), act_no) != std::end(GATHER_ACTIONS)) {
-                if (options.trace_actions && frames - gather_traced_at > 30) {
-                    LOG_INFO(Frontend, "actions: act_no {} motion speed {:.2f} -> {:.2f}", act_no, ctx->f.s[0],
-                             ctx->f.s[0] * options.gather_speed);
-                }
-                gather_traced_at = frames;
-                ctx->f.s[0] *= options.gather_speed;
-            }
-        }
-    }
-    original(ctx);
-}
-
-// The gathering actions whose item comes from the action's own count of frames, not from its
-// motion: hastening only the motion ended them before the count did, and no item came (crouched
-// gathering, catching bugs, mining: the player's test). Their hunter's update runs gather_speed
-// times a frame, so the count keeps up with the motion.
+// The gathering actions whose item comes at a moment of their motion, checked each update (crouched
+// gathering, catching bugs, mining): a faster motion stepped past it and no item came (the
+// player's tests). Their motion keeps its speed and the hunter's whole update runs gather_speed
+// times a frame instead, each step as the game's own, so the moment is met.
 constexpr u8 GATHER_COUNTED_ACTIONS[] = {78, 81, 82, 84};
 std::unordered_map<u32, float> gather_extra;  // char -> the share of an extra update owed
 
@@ -1088,6 +1067,28 @@ bool GatherCounted(RCtx* ctx, u32 chr) {
     const u8 act_no = rd8(ctx, base + BASE_ACT_NO);
     return std::find(std::begin(GATHER_COUNTED_ACTIONS), std::end(GATHER_COUNTED_ACTIONS), act_no) !=
            std::end(GATHER_COUNTED_ACTIONS);
+}
+
+u64 gather_traced_at = 0;  // the frame gather_speed last hastened a motion (trace_actions logs a new run)
+
+void SetMotionSpeed(RCtx* ctx, RFunc original) {
+    const u32 chr = ctx->r[0];
+    if (options.gather_speed > 1.001f && chr != 0 && IsHunter(ctx, chr)) {
+        const u32 base = rd32(ctx, chr + CHAR_BASE_WORK);
+        if (base != 0) {
+            const u8 act_no = rd8(ctx, base + BASE_ACT_NO);
+            if (std::find(std::begin(GATHER_ACTIONS), std::end(GATHER_ACTIONS), act_no) != std::end(GATHER_ACTIONS) &&
+                !GatherCounted(ctx, chr)) {
+                if (options.trace_actions && frames - gather_traced_at > 30) {
+                    LOG_INFO(Frontend, "actions: act_no {} motion speed {:.2f} -> {:.2f}", act_no, ctx->f.s[0],
+                             ctx->f.s[0] * options.gather_speed);
+                }
+                gather_traced_at = frames;
+                ctx->f.s[0] *= options.gather_speed;
+            }
+        }
+    }
+    original(ctx);
 }
 
 void CharMove(RCtx* ctx, RFunc original) {
