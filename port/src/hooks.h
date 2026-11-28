@@ -105,6 +105,9 @@ int MissingHookPoints();
 /// trace_perf: every this many seconds the CPU core logs where the emulation thread's time went
 /// (the game's code, each system call, each service it asks, the rest); 0: off.
 float TracePerfSeconds();
+/// trace_profile: every this many seconds the sampling profiler (profiler.h) logs where the
+/// emulation thread was; 0: off.
+float TraceProfileSeconds();
 /// The game's frames so far (its main loop's updates).
 u64 FrameCount();
 

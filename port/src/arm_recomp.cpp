@@ -21,6 +21,7 @@
 #include "core/memory.h"
 #include "fiber.h"
 #include "hooks.h"
+#include "profiler.h"
 
 #include "common/dynamic_library.h"
 
@@ -305,6 +306,14 @@ void ARM_Recomp::Execute(s64 budget) {
     ctx->budget = budget;
     running = slot.get();
     running_context = loaded;
+    Profiler::Tick(Hooks::TraceProfileSeconds(), [] {
+        std::vector<std::pair<std::uintptr_t, u32>> out;
+        out.reserve(g_functions.size());
+        for (const auto& [addr, fn] : g_functions) {
+            out.emplace_back(reinterpret_cast<std::uintptr_t>(fn), addr & ~1u);
+        }
+        return out;
+    });
     const float trace_perf = Hooks::TracePerfSeconds();
     const auto exec_start = trace_perf > 0.0f ? PerfClock::now() : PerfClock::time_point{};
     host->SwitchTo(*running->fiber);

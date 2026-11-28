@@ -138,6 +138,7 @@ struct Options {
     bool hud_edges = true;  // hud_edges / MH4U_HUD_EDGES: with wide_render, HUD to the edges
     u32 trace_layout = 0;   // trace_layout / MH4U_TRACE_LAYOUT: log HUD objects every n frames
     float trace_perf = 0.0f;  // trace_perf: every n seconds, where the emulation thread's time went
+    float trace_profile = 0.0f;  // trace_profile: every n seconds, the sampling profiler's report
     float gather_speed = 1.0f;  // gather_speed / MH4U_GATHER_SPEED: carving and gathering's
                                 // animations, times this (150 or 1.5: half again as fast)
     bool trace_actions = false;  // trace_actions / MH4U_TRACE_ACTIONS: log the hunters' actions as
@@ -320,6 +321,8 @@ void Set(Options& o, const std::string& key, const std::string& value) {
         float f = IsOff(value) ? 1.0f : std::strtof(value.c_str(), nullptr);
         f = f > 5.0f ? f / 100.0f : f;
         o.gather_speed = f > 0.0f ? std::clamp(f, 1.0f, 2.0f) : 1.0f;  // faster breaks the motions
+    } else if (key == "trace_profile") {
+        o.trace_profile = IsOff(value) ? 0.0f : std::max(0.0f, std::strtof(value.c_str(), nullptr));
     } else if (key == "trace_perf") {
         o.trace_perf = IsOff(value) ? 0.0f : std::max(0.0f, std::strtof(value.c_str(), nullptr));
     } else if (key == "trace_actions") {
@@ -2044,6 +2047,10 @@ int ResultScreenState() {
 
 float TracePerfSeconds() {
     return options.trace_perf;
+}
+
+float TraceProfileSeconds() {
+    return options.trace_profile;
 }
 
 u64 FrameCount() {
