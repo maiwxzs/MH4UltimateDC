@@ -1738,7 +1738,7 @@ index c1dbbd0..f0a0274 100644
  
  u8* MemorySystem::GetPhysicalPointer(PAddr address) {
 diff --git a/src/core/memory.h b/src/core/memory.h
-index d490734..b1ba4f5 100644
+index d490734..2af6a2e 100644
 --- a/src/core/memory.h
 +++ b/src/core/memory.h
 @@ -74,6 +74,9 @@ struct PageTable {
@@ -1792,6 +1792,19 @@ index d490734..b1ba4f5 100644
  class MemorySystem {
  public:
      explicit MemorySystem(Core::System& system);
+@@ -705,6 +728,12 @@ public:
+ 
+     void UnregisterWatchpoint(const Kernel::Process& process, VAddr addr, u32 size);
+ 
++    /// MH4U port: GetPointerForRasterizerCache for the port's fastmem, which reaches the memory
++    /// behind a page the rasterizer cache watches as Azahar's own slow path does.
++    MemoryRef GetCachedPagePointer(VAddr addr) const {
++        return GetPointerForRasterizerCache(addr);
++    }
++
+ private:
+     template <typename T>
+     void UnmappedAccess(const VAddr vaddr, const T value, bool read);
 diff --git a/src/core/savestate.cpp b/src/core/savestate.cpp
 index e065efd..66a3a28 100644
 --- a/src/core/savestate.cpp

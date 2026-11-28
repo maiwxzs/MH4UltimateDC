@@ -289,7 +289,7 @@ bool BeginFault(u64 offset) {
     switch (p.kind) {
     case Kind::Cached: {
         g_memory->RasterizerFlushVirtualRegion(p.vaddr, p.length, Memory::FlushMode::Flush);
-        auto ref = g_memory->GetPointerForRasterizerCache(p.vaddr);
+        auto ref = g_memory->GetCachedPagePointer(p.vaddr);
         std::memcpy(window, ref.GetPtr(), p.length);
         s_cached.fetch_add(1, std::memory_order_relaxed);
         break;
@@ -348,7 +348,7 @@ void EndFaults() {
         if (first < last) {
             switch (p.kind) {
             case Kind::Cached: {
-                auto ref = g_memory->GetPointerForRasterizerCache(p.vaddr + first);
+                auto ref = g_memory->GetCachedPagePointer(p.vaddr + first);
                 std::memcpy(ref.GetPtr(), window + first, last - first);
                 g_memory->RasterizerFlushVirtualRegion(p.vaddr + first, last - first,
                                                        Memory::FlushMode::Invalidate);
