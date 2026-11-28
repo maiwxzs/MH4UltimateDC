@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One command from your own dump to the PC port's code library.
 
-    python3 tools/build_game.py --dump "MH4U v1.3.0 update.cia" [--opt O1] [--install DIR]
+    python3 tools/build_game.py --dump "MH4U v1.3.0 update.cia" [--opt O2] [--install DIR]
 
 1. extracts exheader + ExeFS code from your decrypted dump (.cia update, .3ds/.cci, .cxi),
 2. checks it is a version the port runs (config/versions.json): USA v1.3.0, whose addresses
@@ -316,7 +316,10 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--dump", required=True, help="decrypted .cia / .3ds / .cci / .cxi of your own copy")
     ap.add_argument("--out", default=os.path.join(ROOT, "build", "game"))
-    ap.add_argument("--opt", default="O1", help="O0 builds fast, O1/O2 run faster")
+    ap.add_argument("--opt", default="O2", help="O0 builds fast, O1/O2 run faster (O2: the default)")
+    ap.add_argument("--march", default="native",
+                    help="the CPU to compile for (clang's -march): native, this computer's, by default; "
+                         "'none' for any x86-64 (a library to copy to another computer)")
     ap.add_argument("--cc", help="C compiler (default: clang, or x86_64-w64-mingw32-clang on Windows)")
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 2)
     ap.add_argument("--install", metavar="AZAHAR_USER_DIR", nargs="?", const=default_user_dir(),
@@ -431,9 +434,12 @@ def main(argv=None) -> int:
     # (the compiler's path, for a report: a clang found on the PATH, or Zig's or llvm-mingw's fetched one)
     shown = cc if os.path.dirname(cc) else (shutil.which(cc) or cc)
     print(f"compiling with {shown} -{args.opt}{' for Android' if args.android else ''} ({args.jobs} jobs; "
-          "-O1 takes a while)")
+          "-O2 takes a while)")
+    # the library is built on the computer that runs it: compiled for its own CPU (AVX2 and the
+    # like where it has them), the game's code runs faster
+    cpu = [] if args.android or args.march in ("", "none") else [f"-march={args.march}"]
     lib = rbuild.build(out, args.jobs, args.opt, ["RC_PAGED"], os.path.join("android", name) if args.android else name,
-                       [rbuild.DLL_GLUE], cc=cc, extra_flags=["-fvisibility=hidden"], android=args.android)
+                       [rbuild.DLL_GLUE], cc=cc, extra_flags=["-fvisibility=hidden", *cpu], android=args.android)
     print(f"code library: {lib}")
     if args.android and not args.install:
         print(f"next: copy it to your device, into Azahar's user folder as recomp/{name} "
