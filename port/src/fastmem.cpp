@@ -89,14 +89,19 @@ constexpr std::size_t SECTION_SIZE = Memory::RAM_BLOCK_SIZE + SCRATCH_PAGES * PA
 constexpr std::size_t WINDOW = 128;                // bytes an instruction can reach from where it
                                                    // faulted (the widest copy is 32 words)
 
-enum : u8 { NONE = 0, MAPPED = 1, TEMPORARY = 2 };
+// MAPPED_RO: a page the GPU's cache watches (Azahar's RasterizerCachedMemory) whose memory is up
+// to date (the GPU hasn't drawn there since it was last flushed): the game reads it directly, and
+// only a write faults (the cache has to hear of it). The GPU drawing there makes it fault again
+// for reads too (OnGpuWrite), until a read flushes it.
+enum : u8 { NONE = 0, MAPPED = 1, TEMPORARY = 2, MAPPED_RO = 3 };
 
 bool g_enabled = false;
 HANDLE g_section = nullptr;
 u8* g_view = nullptr;   // the section where Azahar reaches the RAM
 u8* g_arena = nullptr;  // the flat block
 std::vector<u8> g_state;      // per arena page
-std::vector<u32> g_offset;    // per guest page: its section page while MAPPED
+std::vector<u32> g_offset;    // per guest page: its section page while MAPPED or MAPPED_RO
+std::vector<u8> g_dirty;      // per section page: the GPU drew there since it was last flushed
 std::map<u32, u32> g_holes;   // the arena's placeholders: first page -> end page
 std::shared_ptr<Memory::PageTable> g_table;
 Memory::MemorySystem* g_memory = nullptr;
@@ -145,14 +150,15 @@ bool IsolateHole(u32 page) {
     return true;
 }
 
-bool MapView(u32 page, u64 section_offset) {
+bool MapView(u32 page, u64 section_offset, bool read_only = false) {
     if (!IsolateHole(page)) {
         LOG_CRITICAL(Core_ARM11, "fastmem: no placeholder at page {:05X}", page);
         return false;
     }
     void* at = g_arena + std::size_t{page} * PAGE;
     void* view = pMapViewOfFile3(g_section, GetCurrentProcess(), at, section_offset, PAGE,
-                                 MEM_REPLACE_PLACEHOLDER, PAGE_READWRITE, nullptr, 0);
+                                 MEM_REPLACE_PLACEHOLDER, read_only ? PAGE_READONLY : PAGE_READWRITE,
+                                 nullptr, 0);
     if (view != at) {
         LOG_CRITICAL(Core_ARM11, "fastmem: can't map page {:05X} (error {})", page, GetLastError());
         g_holes.emplace(page, page + 1);
@@ -172,22 +178,73 @@ void UnmapView(u32 page) {
     s_unmaps.fetch_add(1, std::memory_order_relaxed);
 }
 
-/// Puts guest page `page` in the arena as the page table has it: the view of its RAM page, or
-/// nothing. A page the fault handler is using is left to it (it applies this when done).
+bool IsCached(Memory::PageType type) {
+    return type == Memory::PageType::RasterizerCachedMemory;
+}
+
+/// Puts guest page `page` in the arena as the page table has it: the view of its RAM page, read
+/// only for a page the GPU's cache watches and hasn't drawn on, or nothing. A page the fault
+/// handler is using is left to it (it applies this when done).
 void Apply(u32 page, const u8* pointer) {
     if (page >= GUEST_PAGES || g_state[page] == TEMPORARY) {
         return;
     }
-    const u32 want = SectionPage(pointer);
-    if (g_state[page] == MAPPED) {
-        if (g_offset[page] == want) {
+    u32 want = SectionPage(pointer);
+    bool read_only = false;
+    if (!pointer && g_memory && g_table && IsCached(g_table->attributes[page])) {
+        want = SectionPage(g_memory->GetCachedPagePointer(page << 12).GetPtr());
+        if (want != NO_PAGE && g_dirty[want]) {
+            want = NO_PAGE;
+        }
+        read_only = true;
+    }
+    if (g_state[page] == MAPPED || g_state[page] == MAPPED_RO) {
+        if (g_offset[page] == want && (g_state[page] == MAPPED_RO) == read_only) {
             return;
         }
         UnmapView(page);
     }
-    if (want != NO_PAGE && MapView(page, u64{want} * PAGE)) {
-        g_state[page] = MAPPED;
+    if (want != NO_PAGE && MapView(page, u64{want} * PAGE, read_only)) {
+        g_state[page] = read_only ? MAPPED_RO : MAPPED;
         g_offset[page] = want;
+    }
+}
+
+/// The GPU drew on physical memory [start, start+size): the cached pages showing it read only
+/// fault again, so that a read flushes the drawing to memory first, as Azahar's slow path would.
+void OnGpuWrite(PAddr start, u32 size) {
+    if (!g_table || size == 0) {
+        return;
+    }
+    std::scoped_lock lock{g_mutex};
+    const u64 end = u64{start} + size;
+    for (u64 paddr = start & ~u64{PAGE - 1}; paddr < end; paddr += PAGE) {
+        u32 section_page;
+        std::array<u64, 2> vaddrs{~u64{0}, ~u64{0}};
+        if (paddr >= Memory::FCRAM_PADDR && paddr < u64{Memory::FCRAM_PADDR} + Memory::FCRAM_N3DS_SIZE) {
+            const u64 offset = paddr - Memory::FCRAM_PADDR;
+            section_page = static_cast<u32>(offset / PAGE);
+            if (offset < Memory::FCRAM_SIZE) {
+                vaddrs[0] = Memory::LINEAR_HEAP_VADDR + offset;
+            }
+            vaddrs[1] = Memory::NEW_LINEAR_HEAP_VADDR + offset;
+        } else if (paddr >= Memory::VRAM_PADDR && paddr < u64{Memory::VRAM_PADDR} + Memory::VRAM_SIZE) {
+            const u64 offset = paddr - Memory::VRAM_PADDR;
+            section_page = static_cast<u32>((Memory::FCRAM_N3DS_SIZE + offset) / PAGE);
+            vaddrs[0] = Memory::VRAM_VADDR + offset;
+        } else {
+            continue;
+        }
+        if (g_dirty[section_page]) {
+            continue;
+        }
+        g_dirty[section_page] = 1;
+        for (const u64 vaddr : vaddrs) {
+            const u64 page = vaddr / PAGE;
+            if (page < GUEST_PAGES && g_state[page] == MAPPED_RO && g_offset[page] == section_page) {
+                UnmapView(static_cast<u32>(page));
+            }
+        }
     }
 }
 
@@ -239,24 +296,40 @@ u8* ScratchHost(u32 slot) {
     return g_view + Memory::RAM_BLOCK_SIZE + std::size_t{slot} * PAGE;
 }
 
-/// An access to arena offset `offset` faulted: stands the page in with a scratch page holding
-/// what the access should see, for one instruction. False if this isn't ours to handle.
-bool BeginFault(u64 offset) {
+enum class Action { NotOurs, Retry, Step };
+
+/// An access to arena offset `offset` faulted: makes the page readable when that is all it takes
+/// (Retry: the instruction runs again), or stands it in with a scratch page holding what the
+/// access should see, for one instruction (Step).
+Action BeginFault(u64 offset, bool write) {
     std::scoped_lock lock{g_mutex};
     if (!g_table || !g_memory || t_pending_count >= SCRATCH_PAGES) {
-        return false;
+        return Action::NotOurs;
     }
     const u32 page = static_cast<u32>(offset / PAGE);
-    if (page < GUEST_PAGES && g_state[page] == MAPPED) {
-        // mapped since (the GPU's cache let go of it): the instruction can just run again, but
-        // the single step still has to be taken
-        Pending& p = t_pending[t_pending_count++];
-        p = {};
-        p.page = NO_PAGE;
-        return true;
+    if (page < GUEST_PAGES && (g_state[page] == MAPPED || (g_state[page] == MAPPED_RO && !write))) {
+        return Action::Retry; // there since (the GPU's cache let go of it)
     }
     if (page < ARENA_PAGES && g_state[page] == TEMPORARY) {
-        return false; // can't fault on a page that is there
+        return Action::NotOurs; // can't fault on a page that is there
+    }
+    if (page < GUEST_PAGES && g_state[page] == NONE && !write && IsCached(g_table->attributes[page]) &&
+        !g_table->GetPointerArray()[page]) {
+        // a read of a page the GPU drew on: its drawing to memory, then the page read only
+        g_memory->RasterizerFlushVirtualRegion(page << 12, PAGE, Memory::FlushMode::Flush);
+        const u32 section_page = SectionPage(g_memory->GetCachedPagePointer(page << 12).GetPtr());
+        if (section_page != NO_PAGE) {
+            g_dirty[section_page] = 0;
+        }
+        Apply(page, nullptr);
+        s_cached.fetch_add(1, std::memory_order_relaxed);
+        s_faults.fetch_add(1, std::memory_order_relaxed);
+        if (g_state[page] == MAPPED || g_state[page] == MAPPED_RO) {
+            return Action::Retry;
+        }
+    }
+    if (page < GUEST_PAGES && g_state[page] == MAPPED_RO) {
+        UnmapView(page); // a write: the scratch page takes its place for the instruction
     }
     const u32 slot = t_pending_count;
     Pending& p = t_pending[slot];
@@ -312,20 +385,21 @@ bool BeginFault(u64 offset) {
         }
         break;
     }
-    if (page < GUEST_PAGES && g_state[page] == MAPPED) {
+    if (page < GUEST_PAGES && (g_state[page] == MAPPED || (g_state[page] == MAPPED_RO && !write))) {
         // flushing the GPU's cache let go of the page, which is now in the arena: run again
-        p.page = NO_PAGE;
-        ++t_pending_count;
-        return true;
+        return Action::Retry;
+    }
+    if (page < GUEST_PAGES && g_state[page] == MAPPED_RO) {
+        UnmapView(page); // mapped read only again meanwhile; the write still needs the scratch page
     }
     std::memcpy(p.before, window, p.length);
     if (!MapView(page, Memory::RAM_BLOCK_SIZE + u64{slot} * PAGE)) {
-        return false;
+        return Action::NotOurs;
     }
     g_state[page] = TEMPORARY;
     ++t_pending_count;
     s_faults.fetch_add(1, std::memory_order_relaxed);
-    return true;
+    return Action::Step;
 }
 
 /// The single-stepped instruction ran: what it wrote goes where Azahar would have put it, and the
@@ -350,8 +424,14 @@ void EndFaults() {
             case Kind::Cached: {
                 auto ref = g_memory->GetCachedPagePointer(p.vaddr + first);
                 std::memcpy(ref.GetPtr(), window + first, last - first);
-                g_memory->RasterizerFlushVirtualRegion(p.vaddr + first, last - first,
-                                                       Memory::FlushMode::Invalidate);
+                // as Azahar's CPU writes: one of at most 8 bytes lets the cache drop its surfaces
+                // there (and so, often, stop watching the page); then the rest
+                const u32 head = std::min(last - first, 8u);
+                g_memory->RasterizerFlushVirtualRegion(p.vaddr + first, head, Memory::FlushMode::Invalidate);
+                if (last - first > head) {
+                    g_memory->RasterizerFlushVirtualRegion(p.vaddr + first + head, last - first - head,
+                                                           Memory::FlushMode::Invalidate);
+                }
                 break;
             }
             case Kind::OtherMemory:
@@ -392,12 +472,14 @@ LONG CALLBACK Handler(EXCEPTION_POINTERS* info) {
         // Azahar's code expects the host's default rounding, not the guest's
         const unsigned csr = _mm_getcsr();
         _mm_setcsr(0x1F80);
-        const bool handled = BeginFault(address - base);
+        const Action action = BeginFault(address - base, record->ExceptionInformation[0] == 1);
         _mm_setcsr(csr);
-        if (!handled) {
+        if (action == Action::NotOurs) {
             return EXCEPTION_CONTINUE_SEARCH;
         }
-        info->ContextRecord->EFlags |= TRAP_FLAG;
+        if (action == Action::Step) {
+            info->ContextRecord->EFlags |= TRAP_FLAG;
+        }
         return EXCEPTION_CONTINUE_EXECUTION;
     }
     if (record->ExceptionCode == EXCEPTION_SINGLE_STEP && t_pending_count > 0) {
@@ -473,6 +555,7 @@ bool Enable(std::string& error) {
         }
     }
     Memory::PageTable::Pointers::on_change = OnPageChange;
+    Memory::MemorySystem::on_gpu_write = OnGpuWrite;
     Memory::SetRamAllocator({AllocateRam, ReleaseRam});
     g_enabled = true;
     return true;
@@ -501,6 +584,7 @@ u8* Bind(const std::shared_ptr<Memory::PageTable>& table, Memory::MemorySystem& 
             return nullptr;
         }
         g_state.assign(ARENA_PAGES, NONE);
+        g_dirty.assign(Memory::RAM_BLOCK_SIZE / PAGE, 0);
         g_offset.assign(GUEST_PAGES, NO_PAGE);
         g_holes.clear();
         g_holes.emplace(0, ARENA_PAGES);

@@ -1738,7 +1738,7 @@ index c1dbbd0..f0a0274 100644
  
  u8* MemorySystem::GetPhysicalPointer(PAddr address) {
 diff --git a/src/core/memory.h b/src/core/memory.h
-index d490734..2af6a2e 100644
+index d490734..b38a407 100644
 --- a/src/core/memory.h
 +++ b/src/core/memory.h
 @@ -74,6 +74,9 @@ struct PageTable {
@@ -1792,7 +1792,7 @@ index d490734..2af6a2e 100644
  class MemorySystem {
  public:
      explicit MemorySystem(Core::System& system);
-@@ -705,6 +728,12 @@ public:
+@@ -705,6 +728,17 @@ public:
  
      void UnregisterWatchpoint(const Kernel::Process& process, VAddr addr, u32 size);
  
@@ -1801,6 +1801,11 @@ index d490734..2af6a2e 100644
 +    MemoryRef GetCachedPagePointer(VAddr addr) const {
 +        return GetPointerForRasterizerCache(addr);
 +    }
++
++    /// MH4U port: told when the GPU's cache takes ownership of physical memory [start, start+size)
++    /// (it drew there: memory is older than the cache until flushed), for the port's fastmem.
++    using GpuWriteCallback = void (*)(PAddr start, u32 size);
++    inline static GpuWriteCallback on_gpu_write = nullptr;
 +
  private:
      template <typename T>
@@ -1966,6 +1971,20 @@ index 97a3a64..4237032 100644
      // Attempt to use hardware vertex shaders if possible.
      if (accelerate_draw && rasterizer->AccelerateDrawBatch(is_indexed)) {
          return;
+diff --git a/src/video_core/rasterizer_cache/rasterizer_cache.h b/src/video_core/rasterizer_cache/rasterizer_cache.h
+index 6a17a70..a2185b3 100644
+--- a/src/video_core/rasterizer_cache/rasterizer_cache.h
++++ b/src/video_core/rasterizer_cache/rasterizer_cache.h
+@@ -1353,6 +1353,9 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, SurfaceId region
+ 
+     if (region_owner_id) {
+         dirty_regions.set({invalid_interval, region_owner_id});
++        if (Memory::MemorySystem::on_gpu_write) [[unlikely]] {
++            Memory::MemorySystem::on_gpu_write(addr, size); // MH4U port: fastmem
++        }
+     } else {
+         dirty_regions.erase(invalid_interval);
+     }
 diff --git a/src/video_core/renderer_opengl/renderer_opengl.cpp b/src/video_core/renderer_opengl/renderer_opengl.cpp
 index e78e2c0..9a16ad2 100644
 --- a/src/video_core/renderer_opengl/renderer_opengl.cpp
