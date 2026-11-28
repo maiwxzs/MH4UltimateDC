@@ -137,6 +137,7 @@ struct Options {
                                   // part of slot n all the time (to check the drawing)
     bool hud_edges = true;  // hud_edges / MH4U_HUD_EDGES: with wide_render, HUD to the edges
     u32 trace_layout = 0;   // trace_layout / MH4U_TRACE_LAYOUT: log HUD objects every n frames
+    float trace_perf = 0.0f;  // trace_perf: every n seconds, where the emulation thread's time went
     float gather_speed = 1.0f;  // gather_speed / MH4U_GATHER_SPEED: carving and gathering's
                                 // animations, times this (150 or 1.5: half again as fast)
     bool trace_actions = false;  // trace_actions / MH4U_TRACE_ACTIONS: log the hunters' actions as
@@ -319,6 +320,8 @@ void Set(Options& o, const std::string& key, const std::string& value) {
         float f = IsOff(value) ? 1.0f : std::strtof(value.c_str(), nullptr);
         f = f > 5.0f ? f / 100.0f : f;
         o.gather_speed = f > 0.0f ? std::clamp(f, 1.0f, 2.0f) : 1.0f;  // faster breaks the motions
+    } else if (key == "trace_perf") {
+        o.trace_perf = IsOff(value) ? 0.0f : std::max(0.0f, std::strtof(value.c_str(), nullptr));
     } else if (key == "trace_actions") {
         o.trace_actions = IsOn(value);
     } else if (key == "trace_layout") {
@@ -2039,6 +2042,14 @@ int ResultScreenState() {
     return static_cast<int>(result_state.load(std::memory_order_relaxed));
 }
 
+float TracePerfSeconds() {
+    return options.trace_perf;
+}
+
+u64 FrameCount() {
+    return frames;
+}
+
 int MissingHookPoints() {
     return missing_hook_points;
 }
@@ -2151,7 +2162,7 @@ bool SetOption(const std::string& key, const std::string& value) {
         "kick",
         "target", "skip", "skip_panel", "text_skip", "result_skip", "skip_hint", "skip_end", "skip_end_hold", "touch_overlay",
         "touch_big", "quest_overlay", "target_overlay",
-        "hud_edges", "trace_frames", "trace_layout", "trace_actions", "gather_speed", "trace_panels", "bloom", "motion_blur",
+        "hud_edges", "trace_frames", "trace_layout", "trace_actions", "trace_perf", "gather_speed", "trace_panels", "bloom", "motion_blur",
         "depth_of_field", "radial_blur", "haze", "trace_filters"};
     if (std::find(std::begin(live), std::end(live), key) == std::end(live)) {
         return false;

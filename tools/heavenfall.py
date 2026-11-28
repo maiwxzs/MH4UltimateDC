@@ -168,12 +168,26 @@ def ensure_packages(user_dir: str) -> str:
                 return target
     except OSError:
         pass
-    say("installing the package it needs (" + ", ".join(PACKAGES) + ")")
-    shutil.rmtree(target, ignore_errors=True)
-    cmd = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--target", target,
-           *PACKAGES]
-    if subprocess.run(cmd).returncode != 0:
-        raise Error("packages", "pip couldn't install " + ", ".join(PACKAGES) + " (is the internet on?)")
+    say("installing the packages it needs (" + ", ".join(PACKAGES) + ")")
+    base = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--target", target]
+    # Heavenfall's own versions first; if this Python has no ready-made copy of them (a newer or
+    # older Python than theirs), any ready-made version: none is built from source, which would need
+    # a compiler the player doesn't have
+    unpinned = [p.split("==")[0] for p in PACKAGES]
+    tail = ""
+    for packages in (PACKAGES, unpinned):
+        shutil.rmtree(target, ignore_errors=True)
+        p = subprocess.run(base + ["--only-binary=:all:", *packages], capture_output=True, text=True)
+        print(p.stdout, end="", flush=True)
+        print(p.stderr, end="", flush=True)
+        if p.returncode == 0:
+            break
+        tail = (p.stderr or p.stdout).strip().splitlines()[-1:] or [""]
+        tail = tail[0]
+    else:
+        python = sys.version.split()[0]
+        raise Error("packages", f"pip couldn't install {', '.join(unpinned)} for Python {python}: {tail} "
+                                "(no internet? Or a Python too new for them: Python 3.12 or 3.13 works)")
     with open(marker, "w", encoding="utf-8") as f:
         f.write(want)
     return target

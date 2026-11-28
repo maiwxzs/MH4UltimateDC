@@ -1,6 +1,10 @@
 #include "arm_recomp.h"
 
 #include <algorithm>
+#include <functional>
+#include <string>
+#include <map>
+#include <chrono>
 #include <array>
 #include <cstdlib>
 #include <vector>
@@ -12,6 +16,8 @@
 #include "core/arm/skyeye_common/armstate.h"
 #include "core/core.h"
 #include "core/core_timing.h"
+#include "core/hle/kernel/client_session.h"
+#include "core/hle/kernel/process.h"
 #include "core/memory.h"
 #include "fiber.h"
 #include "hooks.h"
@@ -28,6 +34,61 @@ u32 rc_slow_read(RCtx* ctx, u32 a, u32 size);
 namespace Port {
 
 namespace {
+
+// ── trace_perf: where the emulation thread's time goes. Execute's time is the game's code plus
+// its system calls (each timed on its own: SendSyncRequest by the service asked, so a GPU
+// command list shows as gsp::Gpu); the rest of the wall time is Azahar's own (timed events:
+// the DSP, the screens' vblank and presenting; the frame limiter's wait).
+using PerfClock = std::chrono::steady_clock;
+struct PerfWindow {
+    PerfClock::time_point start{};
+    s64 exec_ns = 0;
+    std::array<s64, 128> svc_ns{};
+    std::array<u32, 128> svc_n{};
+    std::map<std::string, std::pair<s64, u32>> ipc;  // service -> time, requests
+    u64 frames_at_start = 0;
+};
+PerfWindow perf;
+
+s64 Ns(PerfClock::duration d) {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(d).count();
+}
+
+void PerfReport(PerfClock::time_point now, float seconds) {
+    const s64 wall = Ns(now - perf.start);
+    const u64 frames = Hooks::FrameCount() - perf.frames_at_start;
+    s64 svc_total = 0;
+    for (const s64 v : perf.svc_ns) {
+        svc_total += v;
+    }
+    const auto pct = [wall](s64 v) { return wall > 0 ? 100.0 * static_cast<double>(v) / static_cast<double>(wall) : 0.0; };
+    const double secs = static_cast<double>(wall) / 1e9;
+    LOG_INFO(Core_ARM11,
+             "perf: {:.1f} s, {} game frames ({:.1f} fps, {:.2f} ms each): game code {:.1f}%, system calls {:.1f}%, "
+             "Azahar's own (events, presenting, waiting) {:.1f}%",
+             secs, frames, secs > 0 ? static_cast<double>(frames) / secs : 0.0,
+             frames ? static_cast<double>(wall) / 1e6 / static_cast<double>(frames) : 0.0, pct(perf.exec_ns - svc_total),
+             pct(svc_total), pct(wall - perf.exec_ns));
+    std::vector<std::pair<s64, std::string>> top;
+    for (std::size_t i = 0; i < perf.svc_ns.size(); ++i) {
+        if (perf.svc_n[i] && i != 0x32) {
+            top.emplace_back(perf.svc_ns[i], fmt::format("svc {:02X} x{}", i, perf.svc_n[i]));
+        }
+    }
+    for (const auto& [name, v] : perf.ipc) {
+        top.emplace_back(v.first, fmt::format("{} x{}", name.empty() ? "(unnamed)" : name, v.second));
+    }
+    std::sort(top.begin(), top.end(), std::greater<>());
+    std::string line;
+    for (std::size_t i = 0; i < top.size() && i < 8; ++i) {
+        line += fmt::format("{}{} {:.1f}%", i ? ", " : "", top[i].second, pct(top[i].first));
+    }
+    LOG_INFO(Core_ARM11, "perf: the system calls' time: {}", line);
+    (void)seconds;
+    perf = PerfWindow{};
+    perf.start = now;
+    perf.frames_at_start = Hooks::FrameCount();
+}
 
 constexpr u32 SVC_EXIT_PROCESS = 0x03;
 constexpr u32 SVC_EXIT_THREAD = 0x09;
@@ -244,7 +305,20 @@ void ARM_Recomp::Execute(s64 budget) {
     ctx->budget = budget;
     running = slot.get();
     running_context = loaded;
+    const float trace_perf = Hooks::TracePerfSeconds();
+    const auto exec_start = trace_perf > 0.0f ? PerfClock::now() : PerfClock::time_point{};
     host->SwitchTo(*running->fiber);
+    if (trace_perf > 0.0f) {
+        const auto now = PerfClock::now();
+        if (perf.start == PerfClock::time_point{}) {
+            perf.start = exec_start;
+            perf.frames_at_start = Hooks::FrameCount();
+        }
+        perf.exec_ns += Ns(now - exec_start);
+        if (Ns(now - perf.start) >= static_cast<s64>(trace_perf * 1e9)) {
+            PerfReport(now, trace_perf);
+        }
+    }
     if (running->finished) {
         // The thread exited; its fiber is parked for good and nothing on its stack needs
         // unwinding, so the stack can go.
@@ -381,7 +455,29 @@ void ARM_Recomp::Svc(u32 imm, u32 next_pc) {
     ctx->r[15] = next_pc & ~1u;
     thumb = (next_pc & 1) != 0;
     rc_apply_rounding(0); // Azahar's own code runs with the default rounding
-    svc_context.CallSVC(imm);
+    if (Hooks::TracePerfSeconds() > 0.0f) {
+        std::string service;
+        if (imm == 0x32) { // SendSyncRequest: which service
+            if (const auto process = system.Kernel().GetCurrentProcess()) {
+                if (const auto session = process->handle_table.Get<Kernel::ClientSession>(ctx->r[0])) {
+                    service = session->GetName();
+                }
+            }
+        }
+        const auto t0 = PerfClock::now();
+        svc_context.CallSVC(imm);
+        const s64 spent = Ns(PerfClock::now() - t0);
+        const std::size_t slot = imm & 0x7f;
+        perf.svc_ns[slot] += spent;
+        ++perf.svc_n[slot];
+        if (imm == 0x32) {
+            auto& v = perf.ipc[service];
+            v.first += spent;
+            ++v.second;
+        }
+    } else {
+        svc_context.CallSVC(imm);
+    }
     if (imm == SVC_EXIT_THREAD || imm == SVC_EXIT_PROCESS) {
         running->finished = true;
         YieldToHost();
