@@ -129,7 +129,7 @@ def random_state(rng: random.Random) -> State:
 def build_library(insns, workdir: str) -> str:
     lines = ['#include "recomp.h"']
     for i, ins in enumerate(insns):
-        lines.append(f"static void fz_{i}(RCtx *ctx) {{ {' '.join(straight_line(ins))} }}")
+        lines.append(f"static void fz_{i}(RCtx *ctx) {{ RC_MEM_LOCAL {' '.join(straight_line(ins))} }}")
     lines.append("const RFuncEntry rc_func_table[] = {")
     for i, ins in enumerate(insns):
         lines.append(f"  {{0x{ins.addr:08x}u, {1 if ins.mode == 'thumb' else 0}, fz_{i}}},")
