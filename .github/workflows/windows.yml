@@ -67,9 +67,12 @@ jobs:
             -DENABLE_TESTS=OFF \
             -DMH4U_PORT_DIR="${GITHUB_WORKSPACE}/mh4u/port"
           x86_64-w64-mingw32.shared-cmake --build . -- -j"$(nproc)"
+          # mh4u.exe's function names, for the sampling profiler (trace_profile), before the strip
+          x86_64-w64-mingw32.shared-nm -C --defined-only bin/Release/mh4u.exe | grep -E ' [TtWw] ' | sort > mh4u.syms || true
           x86_64-w64-mingw32.shared-strip -s bin/Release/*.exe
           make bundle
           cp bin/Release/mh4u_runner.exe bin/Release/mh4u.exe bundle/
+          cp mh4u.syms bundle/ || true
           # the bundle has the DLLs Azahar's build found for azahar.exe (with dllwalker); the
           # app's are found the same way, in case it needs one that azahar.exe doesn't
           ../externals/dllwalker/dllwalker.rb bin/Release/mh4u.exe $MXE_DLL_DIRS bin/Release/ > mh4u_dlls.txt
